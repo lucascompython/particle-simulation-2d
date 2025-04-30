@@ -42,13 +42,11 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step.Run {
     return sdl_make_cmd;
 }
 
-// TODO Finish this
-fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step.Run {
+fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile) void {
     const sdl_make_step = make_sdl(b, exe);
 
-    const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native");
-    exe.step.dependOn(sdl_make_step);
-    return make_deps_step;
+    const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native)");
+    make_deps_step.dependOn(&sdl_make_step.step);
 }
 
 // Although this function looks imperative, note that its job is to
@@ -88,20 +86,14 @@ pub fn build(b: *std.Build) void {
 
     exe.want_lto = optimize != .Debug;
 
+    exe.linkLibC();
+
+    make_deps(b, exe);
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe);
-
-    exe.linkLibC();
-
-    const sdl_make_cmd = make_sdl(b, exe);
-
-    const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native");
-
-    make_deps_step.dependOn(&sdl_make_cmd.step);
-    const notify_send_cmd = b.addSystemCommand(&.{ "notify-send", "-u", "critical", "ola" });
-    make_deps_step.dependOn(&notify_send_cmd.step);
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish

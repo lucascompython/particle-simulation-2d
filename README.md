@@ -19,6 +19,9 @@ I wanted to add another GPU method, namely Transform Feedback since it is (I thi
 ```bash
 git clone --recursive https://github.com/lucascompython/particle-simulation-2d.git
 cd particle-simulation-2d
+
+zig build make-deps # Building dependencies (SDL3, ImGui, Dawn, Wgpu-Native)
+
 zig build run
 # OR
 zig build run -Doptimize=ReleaseFast # for release build
