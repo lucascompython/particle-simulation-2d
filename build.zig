@@ -53,7 +53,7 @@ pub fn build(b: *std.Build) void {
         "-DSDL_HIDAPI=OFF",
         "-DCMAKE_BUILD_TYPE=Release",
         "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
-        "-DCMAKE_C_FLAGS=-Ofast -ffast-math -flto",
+        "-DCMAKE_C_FLAGS=-Ofast -ffast-math",
         "-DSDL_SHARED=OFF",
         "-DSDL_STATIC=ON",
         "-DCMAKE_C_COMPILER=clang", // Has to be clang for lto to work between compilers since zig uses llvm
