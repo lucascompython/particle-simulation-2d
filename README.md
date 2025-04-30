@@ -27,5 +27,5 @@ zig build run -Doptimize=ReleaseFast # for release build
 ## TODO:
 - Add Web support
 - Improve performance
-- Add Android support
+- Add mobile support
 - Make CI work nicely
