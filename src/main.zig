@@ -12,7 +12,7 @@ pub fn main() !void {
     var window: ?*sdl.SDL_Window = null;
     var renderer: ?*sdl.SDL_Renderer = null;
 
-    if (!sdl.SDL_CreateWindowAndRenderer("examples/renderer/clear", 640, 480, 0, &window, &renderer)) {
+    if (!sdl.SDL_CreateWindowAndRenderer("Particle Simulation 2D", 1360, 768, 0, &window, &renderer)) {
         std.process.exit(1);
     }
 
