@@ -15,19 +15,6 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    // This creates a "module", which represents a collection of source files alongside
-    // some compilation options, such as optimization mode and linked system libraries.
-    // Every executable or library we compile will be based on one or more modules.
-    const lib_mod = b.createModule(.{
-        // `root_source_file` is the Zig "entry point" of the module. If a module
-        // only contains e.g. external object files, you can make this `null`.
-        // In this case the main source file is merely a path, however, in more
-        // complicated build scripts, this could be a generated file.
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
     // We will also create a module for our other entry point, 'main.zig'.
     const exe_mod = b.createModule(.{
         // `root_source_file` is the Zig "entry point" of the module. If a module
@@ -37,26 +24,9 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .strip = optimize != .Debug,
+        .unwind_tables = .none,
     });
-
-    // Modules can depend on one another using the `std.Build.Module.addImport` function.
-    // This is what allows Zig source code to use `@import("foo")` where 'foo' is not a
-    // file path. In this case, we set up `exe_mod` to import `lib_mod`.
-    exe_mod.addImport("particle_simulation_2d_lib", lib_mod);
-
-    // Now, we will create a static library based on the module we created above.
-    // This creates a `std.Build.Step.Compile`, which is the build step responsible
-    // for actually invoking the compiler.
-    const lib = b.addLibrary(.{
-        .linkage = .static,
-        .name = "particle_simulation_2d",
-        .root_module = lib_mod,
-    });
-
-    // This declares intent for the library to be installed into the standard
-    // location when the user invokes the "install" step (the default step when
-    // running `zig build`).
-    b.installArtifact(lib);
 
     // This creates another `std.Build.Step.Compile`, but this one builds an executable
     // rather than a static library.
@@ -65,10 +35,54 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
+    exe.want_lto = optimize != .Debug;
+
+    const sdl_src_dir = "external/SDL3";
+    const sdl_build_dir = sdl_src_dir ++ "/build";
+
+    const sdl_cmake_cmd = b.addSystemCommand(&.{
+        "cmake",
+        "-DSDL_AUDIO=OFF",
+        "-DSDL_HAPTIC=OFF",
+        "-DSDL_CAMERA=OFF",
+        "-DSDL_SENSOR=OFF",
+        "-DSDL_DIALOG=OFF",
+        "-DSDL_JOYSTICK=OFF",
+        "-DSDL_GPU=OFF",
+        "-DSDL_POWER=OFF",
+        "-DSDL_HIDAPI=OFF",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
+        "-DCMAKE_C_FLAGS=-Ofast -ffast-math -flto",
+        "-DSDL_SHARED=OFF",
+        "-DSDL_STATIC=ON",
+        "-DCMAKE_C_COMPILER=clang", // Has to be clang for lto to work between compilers since zig uses llvm
+        "-B" ++ sdl_build_dir,
+        sdl_src_dir,
+    });
+
+    const cpu_count = std.Thread.getCpuCount() catch 1;
+
+    var buf: [2]u8 = undefined;
+    const cpu_count_str = std.fmt.bufPrint(&buf, "{}", .{cpu_count}) catch "1";
+
+    const sdl_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", sdl_build_dir, "--config", "Release", "--", "-j", cpu_count_str });
+
+    sdl_make_cmd.step.dependOn(&sdl_cmake_cmd.step);
+
+    exe.step.dependOn(&sdl_make_cmd.step);
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe);
+
+    exe.linkLibC();
+
+    exe.addIncludePath(b.path(sdl_src_dir ++ "/include"));
+
+    exe.addLibraryPath(b.path(sdl_build_dir));
+    exe.root_module.linkSystemLibrary("SDL3", .{ .preferred_link_mode = .static });
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
@@ -93,14 +107,6 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    // Creates a step for unit testing. This only builds the test executable
-    // but does not run it.
-    const lib_unit_tests = b.addTest(.{
-        .root_module = lib_mod,
-    });
-
-    const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
-
     const exe_unit_tests = b.addTest(.{
         .root_module = exe_mod,
     });
@@ -111,6 +117,5 @@ pub fn build(b: *std.Build) void {
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_lib_unit_tests.step);
     test_step.dependOn(&run_exe_unit_tests.step);
 }
