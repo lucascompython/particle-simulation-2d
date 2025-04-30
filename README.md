@@ -12,7 +12,7 @@ The simulation can run on different methods, such as:
 - CPU - Works everywhere but has limited performance
 - GPU (Compute Shaders) - Only works on native and WebGpu (no WebGl support) but has much better performance
 
-I wanted to add another GPU method, namely Transform Feedback since it is (I think) pretty the most performant method for this simulation that can run on WebGl, but I've found it difficult to implement in `wgpu`. Here is a [discussion](https://github.com/gfx-rs/wgpu/discussions/7601) about it.
+I wanted to add another GPU method, namely Transform Feedback since it is (I think) pretty the most performant method for this simulation that can run on WebGl, but I've found it difficult to implement in `wgpu`. Here is a [discussion](https://github.com/gfx-rs/wgpu/discussions/7601) about it. Still looking into it!
 
 ## Build Locally
 
