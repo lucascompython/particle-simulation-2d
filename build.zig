@@ -1,5 +1,56 @@
 const std = @import("std");
 
+fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step.Run {
+    const sdl_src_dir = "external/SDL3";
+    const sdl_build_dir = sdl_src_dir ++ "/build";
+
+    const sdl_cmake_cmd = b.addSystemCommand(&.{
+        "cmake",
+        "-DSDL_AUDIO=OFF",
+        "-DSDL_HAPTIC=OFF",
+        "-DSDL_CAMERA=OFF",
+        "-DSDL_SENSOR=OFF",
+        "-DSDL_DIALOG=OFF",
+        "-DSDL_JOYSTICK=OFF",
+        "-DSDL_GPU=OFF",
+        "-DSDL_POWER=OFF",
+        "-DSDL_HIDAPI=OFF",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
+        "-DCMAKE_C_FLAGS=-Ofast -ffast-math",
+        "-DSDL_SHARED=OFF",
+        "-DSDL_STATIC=ON",
+        "-DCMAKE_C_COMPILER=clang", // Has to be clang for lto to work between compilers since zig uses llvm, not sure how this works on windows
+        "-B" ++ sdl_build_dir,
+        sdl_src_dir,
+    });
+
+    const cpu_count = std.Thread.getCpuCount() catch 1;
+
+    var buf: [2]u8 = undefined;
+    const cpu_count_str = std.fmt.bufPrint(&buf, "{}", .{cpu_count}) catch "1";
+
+    const sdl_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", sdl_build_dir, "--config", "Release", "--", "-j", cpu_count_str });
+
+    sdl_make_cmd.step.dependOn(&sdl_cmake_cmd.step);
+
+    exe.addIncludePath(b.path(sdl_src_dir ++ "/include"));
+
+    exe.addLibraryPath(b.path(sdl_build_dir));
+    exe.root_module.linkSystemLibrary("SDL3", .{ .preferred_link_mode = .static });
+
+    return sdl_make_cmd;
+}
+
+// TODO Finish this
+fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step.Run {
+    const sdl_make_step = make_sdl(b, exe);
+
+    const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native");
+    exe.step.dependOn(sdl_make_step);
+    return make_deps_step;
+}
+
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
@@ -37,41 +88,6 @@ pub fn build(b: *std.Build) void {
 
     exe.want_lto = optimize != .Debug;
 
-    const sdl_src_dir = "external/SDL3";
-    const sdl_build_dir = sdl_src_dir ++ "/build";
-
-    const sdl_cmake_cmd = b.addSystemCommand(&.{
-        "cmake",
-        "-DSDL_AUDIO=OFF",
-        "-DSDL_HAPTIC=OFF",
-        "-DSDL_CAMERA=OFF",
-        "-DSDL_SENSOR=OFF",
-        "-DSDL_DIALOG=OFF",
-        "-DSDL_JOYSTICK=OFF",
-        "-DSDL_GPU=OFF",
-        "-DSDL_POWER=OFF",
-        "-DSDL_HIDAPI=OFF",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
-        "-DCMAKE_C_FLAGS=-Ofast -ffast-math",
-        "-DSDL_SHARED=OFF",
-        "-DSDL_STATIC=ON",
-        "-DCMAKE_C_COMPILER=clang", // Has to be clang for lto to work between compilers since zig uses llvm, not sure how this works on windows
-        "-B" ++ sdl_build_dir,
-        sdl_src_dir,
-    });
-
-    const cpu_count = std.Thread.getCpuCount() catch 1;
-
-    var buf: [2]u8 = undefined;
-    const cpu_count_str = std.fmt.bufPrint(&buf, "{}", .{cpu_count}) catch "1";
-
-    const sdl_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", sdl_build_dir, "--config", "Release", "--", "-j", cpu_count_str });
-
-    sdl_make_cmd.step.dependOn(&sdl_cmake_cmd.step);
-
-    exe.step.dependOn(&sdl_make_cmd.step);
-
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
@@ -79,10 +95,13 @@ pub fn build(b: *std.Build) void {
 
     exe.linkLibC();
 
-    exe.addIncludePath(b.path(sdl_src_dir ++ "/include"));
+    const sdl_make_cmd = make_sdl(b, exe);
 
-    exe.addLibraryPath(b.path(sdl_build_dir));
-    exe.root_module.linkSystemLibrary("SDL3", .{ .preferred_link_mode = .static });
+    const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native");
+
+    make_deps_step.dependOn(&sdl_make_cmd.step);
+    const notify_send_cmd = b.addSystemCommand(&.{ "notify-send", "-u", "critical", "ola" });
+    make_deps_step.dependOn(&notify_send_cmd.step);
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
