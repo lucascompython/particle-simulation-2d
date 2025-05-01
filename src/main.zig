@@ -1,34 +1,38 @@
 const std = @import("std");
-const sdl = @import("sdl.zig").SDL;
+const c = @import("c.zig").c;
 
 pub fn main() !void {
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    std.log.info("Hello World!", .{});
 
-    if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
-        std.debug.print("SDL initialization failed: {s}\n", .{sdl.SDL_GetError()});
+    const instance = c.wgpuCreateInstance(null);
+
+    if (!c.SDL_Init(c.SDL_INIT_VIDEO)) {
+        std.log.err("SDL initialization failed: {s}\n", .{c.SDL_GetError()});
+
+        std.process.exit(1);
+    }
+    const window: ?*c.SDL_Window = null;
+
+    if (c.SDL_CreateWindow("Particle Simulation 2D", 1360, 768, 0) == null) {
         std.process.exit(1);
     }
 
-    var window: ?*sdl.SDL_Window = null;
-    var renderer: ?*sdl.SDL_Renderer = null;
+    const surface = c.SDL_GetWGPUSurface(instance, window);
 
-    if (!sdl.SDL_CreateWindowAndRenderer("Particle Simulation 2D", 1360, 768, 0, &window, &renderer)) {
-        std.process.exit(1);
-    }
+    std.log.info("Surface Created: {any}", .{surface});
 
     defer {
-        sdl.SDL_DestroyRenderer(renderer);
-        sdl.SDL_DestroyWindow(window);
-        sdl.SDL_Quit();
+        c.SDL_DestroyWindow(window);
+        c.SDL_Quit();
     }
 
-    while (true) {
-        var event: sdl.SDL_Event = undefined;
-        if (sdl.SDL_PollEvent(&event)) {
+    var event: c.SDL_Event = undefined;
+    event_loop: while (true) {
+        while (c.SDL_PollEvent(&event)) {
             switch (event.type) {
-                sdl.SDL_EVENT_QUIT => {
-                    std.debug.print("Quitting...\n", .{});
-                    break;
+                c.SDL_EVENT_QUIT => {
+                    std.log.info("Quitting...\n", .{});
+                    break :event_loop;
                 },
                 else => {},
             }

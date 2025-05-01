@@ -36,17 +36,37 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step.Run {
 
     exe.addIncludePath(b.path(sdl_src_dir ++ "/include"));
 
-    exe.addLibraryPath(b.path(sdl_build_dir));
-    exe.root_module.linkSystemLibrary("SDL3", .{ .preferred_link_mode = .static });
+    exe.addObjectFile(b.path(sdl_build_dir ++ "/libSDL3.a"));
 
     return sdl_make_cmd;
 }
 
+fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step.Run {
+    const wgpu_native_dir = "external/wgpu-native";
+    const wgpu_native_build_dir = wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/release"; // TODO: Add support for other OS
+
+    const wgpu_native_make_cmd = b.addSystemCommand(&.{ "make", "lib-native-release", "-C", wgpu_native_dir });
+
+    exe.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
+
+    exe.addObjectFile(b.path(wgpu_native_build_dir ++ "/libwgpu_native.a"));
+
+    return wgpu_native_make_cmd;
+}
+
+fn make_sdl3webgpu(b: *std.Build, exe: *std.Build.Step.Compile) void {
+    exe.addIncludePath(b.path("external/sdl3webgpu"));
+    exe.addCSourceFile(.{ .file = b.path("external/sdl3webgpu/sdl3webgpu.c"), .flags = &[_][]const u8{ "-Ofast", "-ffast-math", "-flto" } });
+}
+
 fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile) void {
     const sdl_make_step = make_sdl(b, exe);
+    const wgpu_native_make_step = make_wgpu_native(b, exe);
 
     const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native)");
     make_deps_step.dependOn(&sdl_make_step.step);
+    make_deps_step.dependOn(&wgpu_native_make_step.step);
+    make_sdl3webgpu(b, exe);
 }
 
 // Although this function looks imperative, note that its job is to
@@ -86,7 +106,7 @@ pub fn build(b: *std.Build) void {
 
     exe.want_lto = optimize != .Debug;
 
-    exe.linkLibC();
+    exe.linkLibCpp();
 
     make_deps(b, exe);
 
