@@ -24,6 +24,8 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step {
         "-DCMAKE_C_COMPILER=clang", // Has to be clang for lto to work between compilers since zig uses llvm, not sure how this works on windows
         "-B" ++ sdl_build_dir,
         sdl_src_dir,
+        "-G",
+        "Ninja",
     });
 
     const cpu_count = std.Thread.getCpuCount() catch 1;
@@ -70,19 +72,24 @@ fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin
         exe.root_module.addCMacro("IMGUI_DISABLE_DEBUG_TOOLS", "");
     }
 
-    exe.addCSourceFiles(.{ .root = b.path(imgui_path), .flags = &[_][]const u8{
-        "-O3",
-        "-ffast-math",
-        "-flto",
-    }, .files = &[_][]const u8{
-        "imgui.cpp",
-        "imgui_demo.cpp",
-        "imgui_draw.cpp",
-        "imgui_tables.cpp",
-        "imgui_widgets.cpp",
-        "backends/imgui_impl_sdl3.cpp",
-        "backends/imgui_impl_wgpu.cpp",
-    }, .language = .cpp });
+    exe.addCSourceFiles(.{
+        .root = b.path(imgui_path),
+        .flags = &[_][]const u8{
+            "-O3",
+            "-ffast-math",
+            "-flto",
+        },
+        .files = &[_][]const u8{
+            "imgui.cpp",
+            "imgui_demo.cpp",
+            "imgui_draw.cpp",
+            "imgui_tables.cpp",
+            "imgui_widgets.cpp",
+            "backends/imgui_impl_sdl3.cpp",
+            "backends/imgui_impl_wgpu.cpp",
+        },
+        .language = .cpp,
+    });
 
     exe.addIncludePath(b.path(imgui_path));
     exe.addIncludePath(b.path(imgui_path ++ "/backends"));
