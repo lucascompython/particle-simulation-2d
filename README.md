@@ -17,7 +17,7 @@ I wanted to add another GPU method, namely Transform Feedback since it is (I thi
 ## Build Locally
 
 ```bash
-git clone --recursive https://github.com/lucascompython/particle-simulation-2d.git
+git clone --recursive -j$(nproc) https://github.com/lucascompython/particle-simulation-2d.git
 cd particle-simulation-2d
 
 zig build make-deps # Building dependencies (SDL3, ImGui, Dawn, Wgpu-Native)
