@@ -13,6 +13,7 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step {
         "-DSDL_DIALOG=OFF",
         "-DSDL_JOYSTICK=OFF",
         "-DSDL_GPU=OFF",
+        "-DSDL_RENDER=OFF",
         "-DSDL_POWER=OFF",
         "-DSDL_HIDAPI=OFF",
         "-DCMAKE_BUILD_TYPE=Release",
