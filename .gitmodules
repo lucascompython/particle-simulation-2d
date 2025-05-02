@@ -7,3 +7,9 @@
 [submodule "external/sdl3webgpu"]
 	path = external/sdl3webgpu
 	url = https://github.com/eliemichel/sdl3webgpu
+[submodule "external/dear_bindings"]
+	path = external/dear_bindings
+	url = https://github.com/dearimgui/dear_bindings
+[submodule "external/imgui"]
+	path = external/imgui
+	url = https://github.com/ocornut/imgui

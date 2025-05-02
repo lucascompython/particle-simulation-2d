@@ -1,6 +1,6 @@
 const std = @import("std");
 
-fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step.Run {
+fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step {
     const sdl_src_dir = "external/SDL3";
     const sdl_build_dir = sdl_src_dir ++ "/build";
 
@@ -17,7 +17,7 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step.Run {
         "-DSDL_HIDAPI=OFF",
         "-DCMAKE_BUILD_TYPE=Release",
         "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
-        "-DCMAKE_C_FLAGS=-Ofast -ffast-math",
+        "-DCMAKE_C_FLAGS=-O3 -ffast-math",
         "-DSDL_SHARED=OFF",
         "-DSDL_STATIC=ON",
         "-DCMAKE_C_COMPILER=clang", // Has to be clang for lto to work between compilers since zig uses llvm, not sure how this works on windows
@@ -38,10 +38,10 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step.Run {
 
     exe.addObjectFile(b.path(sdl_build_dir ++ "/libSDL3.a"));
 
-    return sdl_make_cmd;
+    return &sdl_make_cmd.step;
 }
 
-fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step.Run {
+fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step {
     const wgpu_native_dir = "external/wgpu-native";
     const wgpu_native_build_dir = wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/release"; // TODO: Add support for other OS
 
@@ -51,21 +51,90 @@ fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step
 
     exe.addObjectFile(b.path(wgpu_native_build_dir ++ "/libwgpu_native.a"));
 
-    return wgpu_native_make_cmd;
+    return &wgpu_native_make_cmd.step;
 }
 
 fn make_sdl3webgpu(b: *std.Build, exe: *std.Build.Step.Compile) void {
     exe.addIncludePath(b.path("external/sdl3webgpu"));
-    exe.addCSourceFile(.{ .file = b.path("external/sdl3webgpu/sdl3webgpu.c"), .flags = &[_][]const u8{ "-Ofast", "-ffast-math", "-flto" } });
+    exe.addCSourceFile(.{ .file = b.path("external/sdl3webgpu/sdl3webgpu.c"), .flags = &[_][]const u8{ "-O3", "-ffast-math", "-flto" }, .language = .c });
 }
 
-fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile) void {
+fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
+    const imgui_path = "external/imgui";
+
+    exe.root_module.addCMacro("IMGUI_IMPL_WEBGPU_BACKEND_WGPU", "");
+    exe.root_module.addCMacro("IMGUI_USER_CONFIG", "\"imgui_config.h\"");
+
+    if (optimize != .Debug) {
+        exe.root_module.addCMacro("IMGUI_DISABLE_DEBUG_TOOLS", "");
+    }
+
+    exe.addCSourceFiles(.{ .root = b.path(imgui_path), .flags = &[_][]const u8{
+        "-O3",
+        "-ffast-math",
+        "-flto",
+    }, .files = &[_][]const u8{
+        "imgui.cpp",
+        "imgui_demo.cpp",
+        "imgui_draw.cpp",
+        "imgui_tables.cpp",
+        "imgui_widgets.cpp",
+        "backends/imgui_impl_sdl3.cpp",
+        "backends/imgui_impl_wgpu.cpp",
+    }, .language = .cpp });
+
+    exe.addIncludePath(b.path(imgui_path));
+    exe.addIncludePath(b.path(imgui_path ++ "/backends"));
+}
+
+fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step {
+    const dear_bindings_path = "external/dear_bindings";
+    const output_path = dear_bindings_path ++ "/generated";
+    const backends_output_path = output_path ++ "/backends";
+    const imgui_path = "external/imgui";
+
+    std.fs.cwd().makePath(backends_output_path) catch {
+        std.debug.print("Failed to create directory: {s}", .{backends_output_path});
+        std.process.exit(1);
+    };
+
+    const install_python_deps_cmd = b.addSystemCommand(&.{ "python3", "-m", "pip", "install", "-r", dear_bindings_path ++ "/requirements.txt" });
+
+    const gen_dcimgui_bindings = b.addSystemCommand(&.{ "python3", dear_bindings_path ++ "/dear_bindings.py", "-o", output_path ++ "/dcimgui", imgui_path ++ "/imgui.h" });
+
+    const gen_sdl3_bindings = b.addSystemCommand(&.{ "python3", dear_bindings_path ++ "/dear_bindings.py", "--backend", "--include", imgui_path ++ "/imgui.h", "--imconfig-path", "external/imgui_config/imgui_config.h", "-o", backends_output_path ++ "/dcimgui_impl_sdl3", imgui_path ++ "/backends/imgui_impl_sdl3.h" });
+
+    const gen_wgpu_bindings = b.addSystemCommand(&.{ "python3", dear_bindings_path ++ "/dear_bindings.py", "--backend", "--include", imgui_path ++ "/imgui.h", "--imconfig-path", "external/imgui_config/imgui_config.h", "-o", backends_output_path ++ "/dcimgui_impl_wgpu", imgui_path ++ "/backends/imgui_impl_wgpu.h" });
+
+    gen_dcimgui_bindings.step.dependOn(&install_python_deps_cmd.step);
+    gen_wgpu_bindings.step.dependOn(&gen_sdl3_bindings.step);
+    gen_wgpu_bindings.step.dependOn(&gen_dcimgui_bindings.step);
+
+    exe.addIncludePath(b.path(output_path));
+    exe.addIncludePath(b.path(backends_output_path));
+    exe.addIncludePath(b.path("external/imgui_config"));
+
+    // compile dcimgui.cpp
+    exe.addCSourceFile(.{ .file = b.path(output_path ++ "/dcimgui.cpp"), .flags = &.{ "-O3", "-ffast-math", "-lto" }, .language = .cpp });
+    // compile dcimgui_impl_sdl3.cpp
+    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_sdl3.cpp"), .flags = &.{ "-O3", "-ffast-math", "-lto" }, .language = .cpp });
+    // compile dcimgui_impl_wgpu.cpp
+    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_wgpu.cpp"), .flags = &.{ "-O3", "-ffast-math", "-lto" }, .language = .cpp });
+
+    return &gen_wgpu_bindings.step;
+}
+
+fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
     const sdl_make_step = make_sdl(b, exe);
     const wgpu_native_make_step = make_wgpu_native(b, exe);
 
+    const make_dear_bindings_step = make_dear_bindings(b, exe);
+
     const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native)");
-    make_deps_step.dependOn(&sdl_make_step.step);
-    make_deps_step.dependOn(&wgpu_native_make_step.step);
+    make_deps_step.dependOn(sdl_make_step);
+    make_deps_step.dependOn(wgpu_native_make_step);
+    make_imgui(b, exe, optimize);
+    make_deps_step.dependOn(make_dear_bindings_step);
     make_sdl3webgpu(b, exe);
 }
 
@@ -108,7 +177,7 @@ pub fn build(b: *std.Build) void {
 
     exe.linkLibCpp();
 
-    make_deps(b, exe);
+    make_deps(b, exe, optimize);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

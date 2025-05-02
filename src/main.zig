@@ -4,6 +4,8 @@ const c = @import("c.zig").c;
 pub fn main() !void {
     std.log.info("Hello World!", .{});
 
+    std.log.info("IMGUI_DISABLE_DEBUG_TOOLS: {any}", .{@hasDecl(c, "IMGUI_DISABLE_DEBUG_TOOLS")});
+
     const instance = c.wgpuCreateInstance(null);
 
     if (!c.SDL_Init(c.SDL_INIT_VIDEO)) {
@@ -24,6 +26,11 @@ pub fn main() !void {
     defer {
         c.SDL_DestroyWindow(window);
         c.SDL_Quit();
+    }
+
+    if (c.ImGui_CreateContext(null) == null) {
+        std.log.err("ImGui initialization failed: {s}\n", .{c.SDL_GetError()});
+        std.process.exit(1);
     }
 
     var event: c.SDL_Event = undefined;
