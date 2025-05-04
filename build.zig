@@ -120,6 +120,7 @@ fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.St
 
     install_python_deps_cmd.step.dependOn(&create_venv_cmd.step);
     gen_dcimgui_bindings.step.dependOn(&install_python_deps_cmd.step);
+    gen_sdl3_bindings.step.dependOn(&install_python_deps_cmd.step);
     gen_wgpu_bindings.step.dependOn(&gen_sdl3_bindings.step);
     gen_wgpu_bindings.step.dependOn(&gen_dcimgui_bindings.step);
 
