@@ -1,6 +1,8 @@
 const std = @import("std");
 
-fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step {
+const C_FLAGS = [_][]const u8{ "-O3", "-ffast-math", "-flto" };
+
+fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) *std.Build.Step {
     const sdl_src_dir = "external/SDL3";
     const sdl_build_dir = sdl_src_dir ++ "/build";
 
@@ -18,22 +20,18 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step {
         "-DSDL_HIDAPI=OFF",
         "-DCMAKE_BUILD_TYPE=Release",
         "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
-        "-DCMAKE_C_FLAGS=-O3 -ffast-math",
+        "-DCMAKE_C_FLAGS=-O3 -ffast-math -flto",
         "-DSDL_SHARED=OFF",
         "-DSDL_STATIC=ON",
         "-DCMAKE_C_COMPILER=clang", // Has to be clang for lto to work between compilers since zig uses llvm, not sure how this works on windows
+        "-DCMAKE_LINKER_TYPE=LLD",
         "-B" ++ sdl_build_dir,
         sdl_src_dir,
         "-G",
         "Ninja",
     });
 
-    const cpu_count = std.Thread.getCpuCount() catch 1;
-
-    var buf: [2]u8 = undefined;
-    const cpu_count_str = std.fmt.bufPrint(&buf, "{}", .{cpu_count}) catch "1";
-
-    const sdl_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", sdl_build_dir, "--config", "Release", "--", "-j", cpu_count_str });
+    const sdl_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", sdl_build_dir, "--config", "Release", "--", "-j", cpu_count });
 
     sdl_make_cmd.step.dependOn(&sdl_cmake_cmd.step);
 
@@ -57,15 +55,84 @@ fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step
     return &wgpu_native_make_cmd.step;
 }
 
+fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) *std.Build.Step {
+    const dawn_src_dir = "external/dawn";
+    const dawn_build_dir = dawn_src_dir ++ "/out/Release";
+    const dawn_install_dir = dawn_src_dir ++ "/install/Release";
+
+    const dawn_cmake_cmd = b.addSystemCommand(&.{
+        "cmake",
+        "-S",
+        dawn_src_dir,
+        "-B",
+        dawn_build_dir,
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_C_COMPILER=clang",
+        "-DCMAKE_CXX_COMPILER=clang",
+        "-DCMAKE_LINKER_TYPE=LLD",
+        "-DCMAKE_C_FLAGS=-O3 -ffast-math -flto",
+        "-DCMAKE_CXX_FLAGS=-O3 -ffast-math -flto",
+        "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
+        "-DDAWN_FETCH_DEPENDENCIES=ON",
+
+        "-DDAWN_BUILD_SAMPLES=OFF",
+        "-DDAWN_BUILD_TESTS=OFF",
+        "-DDAWN_ENABLE_DESKTOP_GL=OFF",
+        "-DDAWN_ENABLE_OPENGLES=OFF", // May need to change this for WebGL
+        "-DDAWN_ENABLE_NULL=OFF",
+        "-DDAWN_USE_GLFW=OFF",
+        "-DDAWN_ENABLE_SPIRV_VALIDATION=OFF",
+        "-DDAWN_DXC_ENABLE_ASSERTS_IN_NDEBUG=OFF",
+
+        "-DTINT_BUILD_SPV_READER=OFF",
+        "-DTINT_BUILD_GLSL_WRITER=OFF",
+        "-DTINT_BUILD_GLSL_VALIDATOR=OFF",
+        "-DTINT_BUILD_HLSL_WRITER=OFF",
+        "-DTINT_BUILD_MSL_WRITER=OFF",
+        "-DTINT_BUILD_SPV_WRITER=OFF",
+        "-DTINT_BUILD_WGSL_WRITER=OFF",
+        "-DTINT_BUILD_TESTS=OFF",
+        "-DTINT_BUILD_CMD_TOOLS=OFF",
+        "-DEXTRA_FETCH_ARGS=--shallow",
+        "-DDAWN_BUILD_MONOLITHIC_LIBRARY=OFF", // disable building shared library
+        "-DDAWN_ENABLE_INSTALL=ON",
+
+        "-G",
+        "Ninja",
+    });
+
+    const dawn_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", dawn_build_dir, "--config", "Release", "--", "-j", cpu_count });
+    dawn_make_cmd.step.dependOn(&dawn_cmake_cmd.step);
+
+    const dawn_install_cmd = b.addSystemCommand(&.{ "cmake", "--install", dawn_build_dir, "--prefix", dawn_install_dir });
+    dawn_install_cmd.step.dependOn(&dawn_make_cmd.step);
+
+    // TODO: see dawn install dir
+    exe.addIncludePath(b.path(dawn_src_dir ++ "/include"));
+
+    exe.addIncludePath(b.path(dawn_build_dir ++ "/gen/include"));
+
+    exe.addObjectFile(b.path(dawn_build_dir ++ "/src/dawn/native/libdawn_native.a"));
+
+    return &dawn_install_cmd.step;
+}
+
 fn make_sdl3webgpu(b: *std.Build, exe: *std.Build.Step.Compile) void {
     exe.addIncludePath(b.path("external/sdl3webgpu"));
     exe.addCSourceFile(.{ .file = b.path("external/sdl3webgpu/sdl3webgpu.c"), .flags = &[_][]const u8{ "-O3", "-ffast-math", "-flto" }, .language = .c });
 }
 
-fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
+fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode, webgpu_backend: WebGPUBackend) void {
     const imgui_path = "external/imgui";
 
-    exe.root_module.addCMacro("IMGUI_IMPL_WEBGPU_BACKEND_WGPU", "");
+    switch (webgpu_backend) {
+        .dawn => {
+            exe.root_module.addCMacro("IMGUI_IMPL_WEBGPU_BACKEND_DAWN", "");
+        },
+        .@"wgpu-native" => {
+            exe.root_module.addCMacro("IMGUI_IMPL_WEBGPU_BACKEND_WGPU", "");
+        },
+    }
     exe.root_module.addCMacro("IMGUI_USER_CONFIG", "\"imgui_config.h\"");
 
     if (optimize != .Debug) {
@@ -129,11 +196,11 @@ fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.St
     exe.addIncludePath(b.path("external/imgui_config"));
 
     // compile dcimgui.cpp
-    exe.addCSourceFile(.{ .file = b.path(output_path ++ "/dcimgui.cpp"), .flags = &.{ "-O3", "-ffast-math", "-lto" }, .language = .cpp });
+    exe.addCSourceFile(.{ .file = b.path(output_path ++ "/dcimgui.cpp"), .flags = &.{ "-O3", "-ffast-math", "-flto" }, .language = .cpp });
     // compile dcimgui_impl_sdl3.cpp
-    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_sdl3.cpp"), .flags = &.{ "-O3", "-ffast-math", "-lto" }, .language = .cpp });
+    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_sdl3.cpp"), .flags = &.{ "-O3", "-ffast-math", "-flto" }, .language = .cpp });
     // compile dcimgui_impl_wgpu.cpp
-    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_wgpu.cpp"), .flags = &.{ "-O3", "-ffast-math", "-lto" }, .language = .cpp });
+    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_wgpu.cpp"), .flags = &.{ "-O3", "-ffast-math", "-flto" }, .language = .cpp });
 
     return &gen_wgpu_bindings.step;
 }
@@ -144,9 +211,16 @@ const WebGPUBackend = enum {
 };
 
 fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
+    const cpu_count: usize = std.Thread.getCpuCount() catch 1;
+
+    var buf: [2]u8 = undefined;
+    const cpu_count_str = std.fmt.bufPrint(&buf, "{}", .{cpu_count}) catch "1";
+
     const webgpu_backend = b.option(WebGPUBackend, "webgpu-backend", "WebGPU Implementation to use: dawn or wgpu-native (default: wgpu-native)") orelse .@"wgpu-native";
 
-    const sdl_make_step = make_sdl(b, exe);
+    std.debug.print("Building with '{s}' backend.\nSee the '-Dwebgpu-backend' option for other values.\n\n", .{@tagName(webgpu_backend)});
+
+    const sdl_make_step = make_sdl(b, exe, cpu_count_str);
 
     const make_dear_bindings_step = make_dear_bindings(b, exe);
 
@@ -158,11 +232,11 @@ fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.
             make_deps_step.dependOn(wgpu_native_make_step);
         },
         .dawn => {
-            std.log.err("Dawn backend is not yet implemented!", .{});
-            std.process.exit(1);
+            const dawn_make_step = make_dawn(b, exe, cpu_count_str);
+            make_deps_step.dependOn(dawn_make_step);
         },
     }
-    make_imgui(b, exe, optimize);
+    make_imgui(b, exe, optimize, webgpu_backend);
     make_deps_step.dependOn(make_dear_bindings_step);
     make_sdl3webgpu(b, exe);
 }
