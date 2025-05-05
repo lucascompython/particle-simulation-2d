@@ -27,8 +27,13 @@ This project has the following build dependencies:
 - And development packages of multiple things like OpenGL, X11, Wayland, etc.
 
 ```bash
-git clone --recurse-submodules --shallow-submodules -j$(nproc) https://github.com/lucascompython/particle-simulation-2d.git
+git clone https://github.com/lucascompython/particle-simulation-2d.git
 cd particle-simulation-2d
+
+# This is a helper script to download all the submodules recursively except for dawn that has its own script for handling submodules
+./fetch_submodules.sh
+# OR on windows
+./fetch_submodules.ps1
 
 zig build make-deps # Building dependencies (SDL3, ImGui, Dawn, Wgpu-Native)
 
