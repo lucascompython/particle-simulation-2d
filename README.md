@@ -16,6 +16,14 @@ I wanted to add another GPU method, namely Transform Feedback since it is (I thi
 
 ## Build Locally
 
+This project has the following build dependencies:
+- `python3` - for [dear_bindings](https://github.com/dearimgui/dear_bindings)
+- `git` - for downloading the [submodules](/external)
+- `rust` - for compiling [wgpu-native](https://github.com/gfx-rs/wgpu-native)
+- `clang` - for compiling C code with LTO enable and not conflict with Zig/Rust compilers
+- `cmake` - for compiling [SDL3](https://github.com/libsdl-org/SDL)
+- `ninja` - for compiling [SDL3](https://github.com/libsdl-org/SDL)
+
 ```bash
 git clone --recursive -j$(nproc) https://github.com/lucascompython/particle-simulation-2d.git
 cd particle-simulation-2d
