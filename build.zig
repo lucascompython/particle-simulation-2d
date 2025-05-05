@@ -138,15 +138,30 @@ fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.St
     return &gen_wgpu_bindings.step;
 }
 
+const WebGPUBackend = enum {
+    dawn,
+    @"wgpu-native",
+};
+
 fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
+    const webgpu_backend = b.option(WebGPUBackend, "webgpu-backend", "WebGPU Implementation to use: dawn or wgpu-native (default: wgpu-native)") orelse .@"wgpu-native";
+
     const sdl_make_step = make_sdl(b, exe);
-    const wgpu_native_make_step = make_wgpu_native(b, exe);
 
     const make_dear_bindings_step = make_dear_bindings(b, exe);
 
     const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native)");
     make_deps_step.dependOn(sdl_make_step);
-    make_deps_step.dependOn(wgpu_native_make_step);
+    switch (webgpu_backend) {
+        .@"wgpu-native" => {
+            const wgpu_native_make_step = make_wgpu_native(b, exe);
+            make_deps_step.dependOn(wgpu_native_make_step);
+        },
+        .dawn => {
+            std.log.err("Dawn backend is not yet implemented!", .{});
+            std.process.exit(1);
+        },
+    }
     make_imgui(b, exe, optimize);
     make_deps_step.dependOn(make_dear_bindings_step);
     make_sdl3webgpu(b, exe);
