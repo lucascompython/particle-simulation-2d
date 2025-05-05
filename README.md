@@ -17,12 +17,14 @@ I wanted to add another GPU method, namely Transform Feedback since it is (I thi
 ## Build Locally
 
 This project has the following build dependencies:
-- `python3` - for [dear_bindings](https://github.com/dearimgui/dear_bindings)
-- `git` - for downloading the [submodules](/external)
-- `rust` - for compiling [wgpu-native](https://github.com/gfx-rs/wgpu-native)
-- `clang` - for compiling C code with LTO enable and not conflict with Zig/Rust compilers
-- `cmake` - for compiling [SDL3](https://github.com/libsdl-org/SDL)
-- `ninja` - for compiling [SDL3](https://github.com/libsdl-org/SDL)
+- **zig** - for, well, the program itself
+- **python3** - for [`dear_bindings`](https://github.com/dearimgui/dear_bindings) and [`fetching the dependencies of Dawn`](https://github.com/google/dawn/blob/main/tools/fetch_dawn_dependencies.py)
+- **git** - for downloading the [submodules](/external)
+- **rust** - for compiling `wgpu-native`
+- **clang** - for compiling `C`/`C++` code with `LTO` enable and not conflict with the `Zig`/`Rust` compilers
+- **cmake** - for compiling `SDL3` and `Dawn`
+- **ninja** - for compiling `SDL3` and `Dawn`
+- And development packages of multiple things like OpenGL, X11, Wayland, etc.
 
 ```bash
 git clone --recurse-submodules --shallow-submodules -j$(nproc) https://github.com/lucascompython/particle-simulation-2d.git
