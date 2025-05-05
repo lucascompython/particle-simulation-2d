@@ -70,9 +70,10 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
         "-DCMAKE_C_COMPILER=clang",
         "-DCMAKE_CXX_COMPILER=clang",
         "-DCMAKE_LINKER_TYPE=LLD",
-        "-DCMAKE_C_FLAGS=-O3 -ffast-math -flto",
-        "-DCMAKE_CXX_FLAGS=-O3 -ffast-math -flto",
+        "-DCMAKE_C_FLAGS=-O3 -ffast-math -flto -static -fPIC",
+        "-DCMAKE_CXX_FLAGS=-O3 -ffast-math -flto -static -fPIC",
         "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
+        "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
         "-DDAWN_FETCH_DEPENDENCIES=ON",
 
         "-DDAWN_BUILD_SAMPLES=OFF",
@@ -94,7 +95,7 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
         "-DTINT_BUILD_TESTS=OFF",
         "-DTINT_BUILD_CMD_TOOLS=OFF",
         "-DEXTRA_FETCH_ARGS=--shallow",
-        "-DDAWN_BUILD_MONOLITHIC_LIBRARY=OFF", // disable building shared library
+        "-DDAWN_BUILD_MONOLITHIC_LIBRARY=ON", // disable building shared library
         "-DDAWN_ENABLE_INSTALL=ON",
 
         "-G",
@@ -108,9 +109,10 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
     dawn_install_cmd.step.dependOn(&dawn_make_cmd.step);
 
     // TODO: see dawn install dir
-    exe.addIncludePath(b.path(dawn_src_dir ++ "/include"));
+    //exe.addIncludePath(b.path(dawn_src_dir ++ "/include"));
 
-    exe.addIncludePath(b.path(dawn_build_dir ++ "/gen/include"));
+    //exe.addIncludePath(b.path(dawn_build_dir ++ "/gen/include"));
+    exe.addIncludePath(b.path(dawn_install_dir ++ "/include"));
 
     exe.addObjectFile(b.path(dawn_build_dir ++ "/src/dawn/native/libdawn_native.a"));
 
