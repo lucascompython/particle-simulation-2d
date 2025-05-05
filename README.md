@@ -25,7 +25,7 @@ This project has the following build dependencies:
 - `ninja` - for compiling [SDL3](https://github.com/libsdl-org/SDL)
 
 ```bash
-git clone --recursive -j$(nproc) https://github.com/lucascompython/particle-simulation-2d.git
+git clone --recurse-submodules --shallow-submodules -j$(nproc) https://github.com/lucascompython/particle-simulation-2d.git
 cd particle-simulation-2d
 
 zig build make-deps # Building dependencies (SDL3, ImGui, Dawn, Wgpu-Native)
