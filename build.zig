@@ -63,6 +63,14 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
     const dawn_src_dir = "external/dawn";
     const dawn_build_dir = dawn_src_dir ++ "/out/Release";
 
+    const fetch_dawn_deps_cmd = b.addSystemCommand(&.{
+        "python3",
+        dawn_src_dir ++ "/tools/fetch_dawn_dependencies.py",
+        "--directory",
+        dawn_src_dir,
+        "--shallow",
+    });
+
     const dawn_cmake_cmd = b.addSystemCommand(&.{
         "cmake",
         "-S",
@@ -76,8 +84,6 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
         "-DCMAKE_C_FLAGS=" ++ C_FLAGS_STR,
         "-DCMAKE_CXX_FLAGS=" ++ C_FLAGS_STR ++ " -stdlib=libc++", // apparently needs to explicitly link against clang's libc++ for some reason
         "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
-        "-DDAWN_FETCH_DEPENDENCIES=ON", // TODO: Make this fetch before building
-        "-DEXTRA_FETCH_ARGS=--shallow",
 
         "-DDAWN_BUILD_SAMPLES=OFF",
         "-DDAWN_BUILD_TESTS=OFF",
@@ -104,6 +110,8 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
         "-G",
         "Ninja",
     });
+
+    dawn_cmake_cmd.step.dependOn(&fetch_dawn_deps_cmd.step);
 
     const dawn_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", dawn_build_dir, "--config", "Release", "--", "-j", cpu_count });
     dawn_make_cmd.step.dependOn(&dawn_cmake_cmd.step);
