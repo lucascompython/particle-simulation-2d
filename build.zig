@@ -229,15 +229,10 @@ fn download_submodules(b: *std.Build, cpu_count: []const u8) void {
         "submodule",
         "update",
         "--init",
-        "--recursive",
         "--recommend-shallow",
         "-j",
         cpu_count,
-        "external/SDL3",
-        "external/imgui",
-        "external/wgpu-native",
-        "external/dear_bindings",
-        "external/sdl3webgpu",
+        "external/dawn",
     } }) catch @panic("Coldn't download git submodules");
 }
 
