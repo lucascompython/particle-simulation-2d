@@ -207,7 +207,7 @@ const WebGPUBackend = enum {
     @"wgpu-native",
 };
 
-fn download_submodules(b: *std.Build, cpu_count: []const u8) void {
+fn download_submodules(b: *std.Build, cpu_count: []const u8, webgpu_backend: WebGPUBackend) void {
     var recursive = std.process.Child.init(
         &.{
             "git",
@@ -220,30 +220,32 @@ fn download_submodules(b: *std.Build, cpu_count: []const u8) void {
             cpu_count,
             "external/SDL3",
             "external/imgui",
-            "external/wgpu-native",
             "external/dear_bindings",
             "external/sdl3webgpu",
+            if (webgpu_backend == .@"wgpu-native") "external/wgpu-native" else null,
         },
         b.allocator,
     );
 
     _ = recursive.spawnAndWait() catch @panic("Couldn't download git submodules...");
 
-    var dawn_submodule = std.process.Child.init(
-        &.{
-            "git",
-            "submodule",
-            "update",
-            "--init",
-            "--recommend-shallow",
-            "-j",
-            cpu_count,
-            "external/dawn",
-        },
-        b.allocator,
-    );
+    if (webgpu_backend == .dawn) {
+        var dawn_submodule = std.process.Child.init(
+            &.{
+                "git",
+                "submodule",
+                "update",
+                "--init",
+                "--recommend-shallow",
+                "-j",
+                cpu_count,
+                "external/dawn",
+            },
+            b.allocator,
+        );
 
-    _ = dawn_submodule.spawnAndWait() catch @panic("Couldn't download git submodules...");
+        _ = dawn_submodule.spawnAndWait() catch @panic("Couldn't download git submodules...");
+    }
 }
 
 fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
