@@ -6,6 +6,8 @@ const C_MARCH_NATIVE = "-march=native";
 var C_FLAGS_ARR = [_][]const u8{ "-O3", "-ffast-math", "-flto", "" };
 var C_FLAGS_STR: [35]u8 = undefined;
 
+var IS_NATIVE_BUILD: bool = undefined;
+
 fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) *std.Build.Step {
     const sdl_src_dir = "external/SDL3";
     const sdl_build_dir = sdl_src_dir ++ "/build";
@@ -50,7 +52,7 @@ fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step
     const wgpu_native_dir = "external/wgpu-native";
     const wgpu_native_build_dir = wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/release";
 
-    const wgpu_native_make_cmd = b.addSystemCommand(&.{ "make", "lib-native-release", "-C", wgpu_native_dir });
+    const wgpu_native_make_cmd = b.addSystemCommand(&.{ "make", "lib-native-release", "-C", wgpu_native_dir, if (IS_NATIVE_BUILD) "EXTRA_RUSTFLAGS=-Ctarget-cpu=native" else "" });
 
     exe.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
 
@@ -293,13 +295,14 @@ pub fn build(b: *std.Build) void {
     // means any target is allowed, and the default is native. Other options
     // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
+    IS_NATIVE_BUILD = target.query.isNative();
 
     var mem: []u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&C_FLAGS_STR);
     const allocator = fba.allocator();
 
     // Compile with -march=native when the zig build is also native
-    if (target.query.isNative()) {
+    if (IS_NATIVE_BUILD) {
         C_FLAGS_ARR[3] = C_MARCH_NATIVE;
 
         mem = allocator.alloc(u8, 35) catch @panic("Couldn't allocate");
