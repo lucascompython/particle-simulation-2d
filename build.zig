@@ -207,8 +207,8 @@ const WebGPUBackend = enum {
     @"wgpu-native",
 };
 
-fn download_submodules(b: *std.Build, cpu_count: []const u8) *std.Build.Step {
-    const download_submodules_recursive = b.addSystemCommand(&.{
+fn download_submodules(b: *std.Build, cpu_count: []const u8) void {
+    _ = std.process.Child.run(.{ .allocator = b.allocator, .argv = &.{
         "git",
         "submodule",
         "update",
@@ -222,21 +222,23 @@ fn download_submodules(b: *std.Build, cpu_count: []const u8) *std.Build.Step {
         "external/wgpu-native",
         "external/dear_bindings",
         "external/sdl3webgpu",
-    });
-    const download_dawn_submodules = b.addSystemCommand(&.{
+    } }) catch @panic("Couldn't download git submodules");
+
+    _ = std.process.Child.run(.{ .allocator = b.allocator, .argv = &.{
         "git",
         "submodule",
         "update",
         "--init",
+        "--recursive",
         "--recommend-shallow",
         "-j",
         cpu_count,
-        "external/dawn",
-    });
-
-    download_dawn_submodules.step.dependOn(&download_submodules_recursive.step);
-
-    return &download_dawn_submodules.step;
+        "external/SDL3",
+        "external/imgui",
+        "external/wgpu-native",
+        "external/dear_bindings",
+        "external/sdl3webgpu",
+    } }) catch @panic("Coldn't download git submodules");
 }
 
 fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
@@ -250,31 +252,26 @@ fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.
     std.debug.print("Building with '{s}' webgpu backend.\nSee the '-Dwebgpu-backend' option for other values.\n\n", .{@tagName(webgpu_backend)});
 
     const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native)");
-    const git_submodules_step = download_submodules(b, cpu_count_str);
-    make_deps_step.dependOn(git_submodules_step);
+    download_submodules(b, cpu_count_str);
 
     const sdl_make_step = make_sdl(b, exe, cpu_count_str);
-    sdl_make_step.dependOn(git_submodules_step);
     make_deps_step.dependOn(sdl_make_step);
 
     make_imgui(b, exe, optimize);
     make_sdl3webgpu(b, exe);
 
     const make_dear_bindings_step = make_dear_bindings(b, exe);
-    make_dear_bindings_step.dependOn(git_submodules_step);
     make_deps_step.dependOn(make_dear_bindings_step);
 
     switch (webgpu_backend) {
         .@"wgpu-native" => {
             const wgpu_native_make_step = make_wgpu_native(b, exe);
-            wgpu_native_make_step.dependOn(git_submodules_step);
             make_deps_step.dependOn(wgpu_native_make_step);
 
             exe.root_module.addCMacro("IMGUI_IMPL_WEBGPU_BACKEND_WGPU", "");
         },
         .dawn => {
             const dawn_make_step = make_dawn(b, exe, cpu_count_str);
-            dawn_make_step.dependOn(git_submodules_step);
             make_deps_step.dependOn(dawn_make_step);
 
             exe.root_module.addCMacro("IMGUI_IMPL_WEBGPU_BACKEND_DAWN", "");
