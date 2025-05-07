@@ -251,6 +251,7 @@ fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.
 
     const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native)");
     const git_submodules_step = download_submodules(b, cpu_count_str);
+    make_deps_step.dependOn(git_submodules_step);
 
     const sdl_make_step = make_sdl(b, exe, cpu_count_str);
     sdl_make_step.dependOn(git_submodules_step);
