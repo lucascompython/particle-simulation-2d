@@ -222,7 +222,7 @@ fn download_submodules(b: *std.Build, cpu_count: []const u8, webgpu_backend: Web
             "external/imgui",
             "external/dear_bindings",
             "external/sdl3webgpu",
-            if (webgpu_backend == .@"wgpu-native") "external/wgpu-native" else "",
+            if (webgpu_backend == .@"wgpu-native") "external/wgpu-native" else " ",
         },
         b.allocator,
     );
