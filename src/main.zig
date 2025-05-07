@@ -1,10 +1,15 @@
 const std = @import("std");
 const c = @import("c.zig").c;
 
+pub const std_options: std.Options = .{ .log_level = switch (@import("builtin").mode) {
+    .Debug => .debug,
+    else => .info,
+} };
+
 pub fn main() !void {
     std.log.info("Hello World!", .{});
 
-    std.log.info("IMGUI_DISABLE_DEBUG_TOOLS: {any}", .{@hasDecl(c, "IMGUI_DISABLE_DEBUG_TOOLS")});
+    std.log.debug("IMGUI_DISABLE_DEBUG_TOOLS: {any}", .{@hasDecl(c, "IMGUI_DISABLE_DEBUG_TOOLS")});
 
     const instance = c.wgpuCreateInstance(null);
 
