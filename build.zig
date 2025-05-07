@@ -1,10 +1,10 @@
 const std = @import("std");
 
-const C_FLAGS = [_][]const u8{ "-O3", "-ffast-math", "-flto" };
-const C_FLAGS_STR = "-O3 -ffast-math -flto";
+const C_BASE_FLAGS = "-O3 -ffast-math -flto ";
+const C_MARCH_NATIVE = "-march=native";
 
-// TODO: Add support for other OS/targets besides linux
-// TOOD: Add support for building deps in debug mode, right now all the dependencies are always built in release mode
+var C_FLAGS_ARR = [_][]const u8{ "-O3", "-ffast-math", "-flto", "" };
+var C_FLAGS_STR: [35]u8 = undefined;
 
 fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) *std.Build.Step {
     const sdl_src_dir = "external/SDL3";
@@ -128,7 +128,7 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
 
 fn make_sdl3webgpu(b: *std.Build, exe: *std.Build.Step.Compile) void {
     exe.addIncludePath(b.path("external/sdl3webgpu"));
-    exe.addCSourceFile(.{ .file = b.path("external/sdl3webgpu/sdl3webgpu.c"), .flags = &C_FLAGS, .language = .c });
+    exe.addCSourceFile(.{ .file = b.path("external/sdl3webgpu/sdl3webgpu.c"), .flags = &C_FLAGS_ARR, .language = .c });
 }
 
 fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
@@ -142,7 +142,7 @@ fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin
 
     exe.addCSourceFiles(.{
         .root = b.path(imgui_path),
-        .flags = &C_FLAGS,
+        .flags = &C_FLAGS_ARR,
         .files = &[_][]const u8{
             "imgui.cpp",
             "imgui_demo.cpp",
@@ -193,11 +193,11 @@ fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.St
     exe.addIncludePath(b.path("external/imgui_config"));
 
     // compile dcimgui.cpp
-    exe.addCSourceFile(.{ .file = b.path(output_path ++ "/dcimgui.cpp"), .flags = &C_FLAGS, .language = .cpp });
+    exe.addCSourceFile(.{ .file = b.path(output_path ++ "/dcimgui.cpp"), .flags = &C_FLAGS_ARR, .language = .cpp });
     // compile dcimgui_impl_sdl3.cpp
-    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_sdl3.cpp"), .flags = &C_FLAGS, .language = .cpp });
+    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_sdl3.cpp"), .flags = &C_FLAGS_ARR, .language = .cpp });
     // compile dcimgui_impl_wgpu.cpp
-    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_wgpu.cpp"), .flags = &C_FLAGS, .language = .cpp });
+    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_wgpu.cpp"), .flags = &C_FLAGS_ARR, .language = .cpp });
 
     return &gen_wgpu_bindings.step;
 }
@@ -293,6 +293,22 @@ pub fn build(b: *std.Build) void {
     // means any target is allowed, and the default is native. Other options
     // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
+
+    var mem: []u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&C_FLAGS_STR);
+    const allocator = fba.allocator();
+
+    // Compile with -march=native when the zig build is also native
+    if (target.query.isNative()) {
+        C_FLAGS_ARR[3] = C_MARCH_NATIVE;
+
+        mem = allocator.alloc(u8, 35) catch @panic("Couldn't allocate");
+        @memcpy(mem, C_BASE_FLAGS ++ C_MARCH_NATIVE);
+    } else {
+        mem = allocator.alloc(u8, 22) catch @panic("Couldn't allocate");
+        @memcpy(mem, C_BASE_FLAGS);
+    }
+    defer b.allocator.free(mem);
 
     // Standard optimization options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
