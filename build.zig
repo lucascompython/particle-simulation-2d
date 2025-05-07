@@ -228,7 +228,7 @@ fn download_submodules(b: *std.Build, cpu_count: []const u8, webgpu_backend: Web
 
     _ = recursive.spawnAndWait() catch @panic("Couldn't download git submodules...");
 
-    var webgpu_backend_cmd = undefined;
+    var webgpu_backend_cmd: std.process.Child = undefined;
     switch (webgpu_backend) {
         .dawn => {
             webgpu_backend_cmd = std.process.Child.init(
@@ -238,7 +238,7 @@ fn download_submodules(b: *std.Build, cpu_count: []const u8, webgpu_backend: Web
         },
         .@"wgpu-native" => {
             webgpu_backend_cmd = std.process.Child.init(
-                &.{ "git", "submodule", "update", "--init", "--recommend-shallow", "-j", cpu_count, "external/wgpu-native" },
+                &.{ "git", "submodule", "update", "--init", "--recursive", "--recommend-shallow", "-j", cpu_count, "external/wgpu-native" },
                 b.allocator,
             );
         },
