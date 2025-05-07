@@ -228,20 +228,21 @@ fn download_submodules(b: *std.Build, cpu_count: []const u8, webgpu_backend: Web
 
     _ = recursive.spawnAndWait() catch @panic("Couldn't download git submodules...");
 
-    var webgpu_backend_cmd = std.process.Child.init(
-        &.{
-            "git",
-            "submodule",
-            "update",
-            "--init",
-            "--recommend-shallow",
-            "-j",
-            cpu_count,
-            if (webgpu_backend == .dawn) "external/dawn" else "external/wgpu-native",
+    var webgpu_backend_cmd = undefined;
+    switch (webgpu_backend) {
+        .dawn => {
+            webgpu_backend_cmd = std.process.Child.init(
+                &.{ "git", "submodule", "update", "--init", "--recommend-shallow", "-j", cpu_count, "external/dawn" },
+                b.allocator,
+            );
         },
-        b.allocator,
-    );
-
+        .@"wgpu-native" => {
+            webgpu_backend_cmd = std.process.Child.init(
+                &.{ "git", "submodule", "update", "--init", "--recommend-shallow", "-j", cpu_count, "external/wgpu-native" },
+                b.allocator,
+            );
+        },
+    }
     _ = webgpu_backend_cmd.spawnAndWait() catch @panic("Couldn't download git submodules...");
 }
 
