@@ -207,6 +207,38 @@ const WebGPUBackend = enum {
     @"wgpu-native",
 };
 
+fn download_submodules(b: *std.Build, cpu_count: []const u8) *std.Build.Step {
+    const download_submodules_recursive = b.addSystemCommand(&.{
+        "git",
+        "submodule",
+        "update",
+        "--init",
+        "--recursive",
+        "--recommend-shallow",
+        "-j",
+        cpu_count,
+        "external/SDL3",
+        "external/imgui",
+        "external/wgpu-native",
+        "external/dear_bindings",
+        "external/sdl3webgpu",
+    });
+    const download_dawn_submodule = b.addSystemCommand(&.{
+        "git",
+        "submodule",
+        "update",
+        "--init",
+        "--recommend-shallow",
+        "-j",
+        cpu_count,
+        "external/dawn",
+    });
+
+    download_dawn_submodule.step.dependOn(&download_submodules_recursive.step);
+
+    return &download_dawn_submodule.step;
+}
+
 fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
     const cpu_count: usize = std.Thread.getCpuCount() catch 1;
 
@@ -217,11 +249,16 @@ fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.
 
     std.debug.print("Building with '{s}' webgpu backend.\nSee the '-Dwebgpu-backend' option for other values.\n\n", .{@tagName(webgpu_backend)});
 
+    const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native)");
+
+    const git_submodules = download_submodules(b, cpu_count_str);
+
+    make_deps_step.dependOn(git_submodules);
+
     const sdl_make_step = make_sdl(b, exe, cpu_count_str);
 
     const make_dear_bindings_step = make_dear_bindings(b, exe);
 
-    const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native)");
     make_deps_step.dependOn(sdl_make_step);
     switch (webgpu_backend) {
         .@"wgpu-native" => {
