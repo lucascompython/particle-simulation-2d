@@ -222,7 +222,7 @@ fn download_submodules(b: *std.Build, cpu_count: []const u8, webgpu_backend: Web
             "external/imgui",
             "external/dear_bindings",
             "external/sdl3webgpu",
-            if (webgpu_backend == .@"wgpu-native") "external/wgpu-native" else null,
+            if (webgpu_backend == .@"wgpu-native") "external/wgpu-native" else "",
         },
         b.allocator,
     );
@@ -259,7 +259,7 @@ fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.
     std.debug.print("Building with '{s}' webgpu backend.\nSee the '-Dwebgpu-backend' option for other values.\n\n", .{@tagName(webgpu_backend)});
 
     const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native)");
-    download_submodules(b, cpu_count_str);
+    download_submodules(b, cpu_count_str, webgpu_backend);
 
     const sdl_make_step = make_sdl(b, exe, cpu_count_str);
     make_deps_step.dependOn(sdl_make_step);
