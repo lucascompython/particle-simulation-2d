@@ -2,31 +2,30 @@ const std = @import("std");
 const c = @import("c.zig").c;
 
 pub fn create_shader_module(device: *c.WGPUDeviceImpl, comptime label_comptime: ?[*:0]const u8, code_slice: [:0]const u8) c.WGPUShaderModule { // Return the optional pointer type
-    // Create StringView for the code
     const code_string_view = c.WGPUStringView{
         .data = code_slice.ptr,
         .length = code_slice.len,
     };
 
-    // Make source mutable to get a mutable pointer to chain
-    var source = c.WGPUShaderModuleWGSLDescriptor{
-        .chain = c.WGPUChainedStruct{
-            .next = null, // Initialize chain pointers
-            .sType = c.WGPUSType_ShaderSourceWGSL, // Correct SType
+    // This structure will be part of the chain for WGPUShaderModuleDescriptor
+    var wgsl_source_descriptor = c.WGPUShaderSourceWGSL{ // Corrected type
+        .chain = .{ // This is the WGPUChainedStruct embedded in the WGSL descriptor
+            .next = null,
+            .sType = c.WGPUSType_ShaderSourceWGSL, // Identify this part of the chain
         },
-        .code = code_string_view, // Assign the StringView struct
+        .code = code_string_view, // Assign the WGPUStringView as per compiler error
     };
 
-    // Handle optional label
     var label_string_view: c.WGPUStringView = .{ .data = null, .length = 0 };
     if (label_comptime) |lbl| {
-        const label_slice = lbl[0..std.mem.len(lbl)]; // Get slice from null-terminated string
+        const label_slice = lbl[0..std.mem.len(lbl)];
         label_string_view = .{ .data = label_slice.ptr, .length = label_slice.len };
     }
 
-    const descriptor = c.WGPUShaderModuleDescriptor{
+    // This is the main descriptor
+    const descriptor = c.WGPUShaderModuleDescriptor{ // This is the base descriptor
         .label = label_string_view,
-        .nextInChain = &source.chain, // Pass mutable pointer
+        .nextInChain = &wgsl_source_descriptor.chain, // Point to the chain member of our WGSL descriptor
     };
 
     return c.wgpuDeviceCreateShaderModule(device, &descriptor);

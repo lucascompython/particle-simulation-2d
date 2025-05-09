@@ -74,24 +74,20 @@ pub const ParticleRenderer = struct {
         const pipeline_layout = c.wgpuDeviceCreatePipelineLayout(device, &pipeline_layout_desc);
         defer c.wgpuPipelineLayoutRelease(pipeline_layout); // Release layout when done
 
-        const vertex_attributes = [_]c.WGPUVertexAttribute{
-            .{ .format = c.WGPUVertexFormat_Float32x2, .offset = @offsetOf(particle_defs.Particle, "pos"), .shaderLocation = 0 }, // pos
-            .{ .format = c.WGPUVertexFormat_Float32x2, .offset = @offsetOf(particle_defs.Particle, "vel"), .shaderLocation = 1 }, // vel
-            .{ .format = c.WGPUVertexFormat_Float32x4, .offset = @offsetOf(particle_defs.Particle, "color"), .shaderLocation = 2 }, // color
-            .{ .format = c.WGPUVertexFormat_Float32x4, .offset = @offsetOf(particle_defs.Particle, "initial_color"), .shaderLocation = 3 }, // initial_color
+        // Vertex attributes for each particle vertex
+        const particle_vertex_attributes = [_]c.WGPUVertexAttribute{
+            .{ .format = c.WGPUVertexFormat_Float32x2, .offset = @offsetOf(particle_defs.Particle, "pos"), .shaderLocation = 0 },
+            .{ .format = c.WGPUVertexFormat_Float32x2, .offset = @offsetOf(particle_defs.Particle, "vel"), .shaderLocation = 1 },
+            .{ .format = c.WGPUVertexFormat_Float32x4, .offset = @offsetOf(particle_defs.Particle, "color"), .shaderLocation = 2 },
+            .{ .format = c.WGPUVertexFormat_Float32x4, .offset = @offsetOf(particle_defs.Particle, "initial_color"), .shaderLocation = 3 },
         };
 
-        const vertex_buffer_layout = c.WGPUVertexBufferLayout{
+        const particle_buffer_layout = c.WGPUVertexBufferLayout{
             .arrayStride = @sizeOf(particle_defs.Particle),
-            .stepMode = c.WGPUVertexStepMode_Instance, // Or Vertex if not instancing quads per particle
-            .attributeCount = vertex_attributes.len,
-            .attributes = &vertex_attributes,
+            .stepMode = c.WGPUVertexStepMode_Vertex, // Each particle struct is one vertex
+            .attributeCount = particle_vertex_attributes.len,
+            .attributes = &particle_vertex_attributes,
         };
-        // For point list, stepMode should be Vertex if particles are vertices.
-        // If we are drawing instances, then Instance. Let's draw particle_count instances of a single point/quad.
-        // The Rust example draws particle_count instances of 1 vertex (effectively points).
-        // Let's use VertexStepMode_Vertex and draw particle_count vertices.
-        // This means the vertex buffer is a list of Particle structs.
 
         // Define the blend state for alpha blending
         const alpha_blend_state = c.WGPUBlendState{
@@ -136,12 +132,12 @@ pub const ParticleRenderer = struct {
             .label = .{ .data = null, .length = 0 }, // Temporary null label
             .layout = pipeline_layout,
             .vertex = .{
-                .module = shader_module.?, // Use unwrapped module from previous fix
-                .entryPoint = .{ .data = vs_entry_point_str.ptr, .length = vs_entry_point_str.len }, // Use StringView
-                .bufferCount = 1,
-                .buffers = &vertex_buffer_layout,
-                .constantCount = 0, // zig v0.12
-                .constants = null, // zig v0.12
+                .module = shader_module.?,
+                .entryPoint = .{ .data = vs_entry_point_str.ptr, .length = vs_entry_point_str.len },
+                .bufferCount = 1, // Only one buffer: the instanced particle data
+                .buffers = &particle_buffer_layout, // Use the instanced layout
+                .constantCount = 0,
+                .constants = null,
             },
             .primitive = primitive_state,
             .depthStencil = null,
@@ -186,6 +182,7 @@ pub const ParticleRenderer = struct {
         canvas_height: f32,
     ) void {
         const proj_matrix = utils.create_orthographic_projection_matrix(0.0, canvas_width, canvas_height, 0.0, -1.0, 1.0);
+
         const uniforms = particle_defs.ProjectionUniforms{ .matrix = proj_matrix };
         c.wgpuQueueWriteBuffer(queue, self.projection_buffer, 0, &uniforms, @sizeOf(particle_defs.ProjectionUniforms));
 
@@ -196,8 +193,9 @@ pub const ParticleRenderer = struct {
             .storeOp = c.WGPUStoreOp_Store,
             .clearValue = c.WGPUColor{ .r = 0.01, .g = 0.01, .b = 0.01, .a = 1.0 },
         };
+        const render_pass_label_str = "Particle Render Pass";
         const render_pass_desc = c.WGPURenderPassDescriptor{
-            .label = "Particle Render Pass",
+            .label = .{ .data = render_pass_label_str.ptr, .length = render_pass_label_str.len },
             .colorAttachmentCount = 1,
             .colorAttachments = &render_pass_color_attachment,
             .depthStencilAttachment = null,
@@ -209,7 +207,14 @@ pub const ParticleRenderer = struct {
 
         c.wgpuRenderPassEncoderSetPipeline(rpass, self.render_pipeline);
         c.wgpuRenderPassEncoderSetBindGroup(rpass, 0, self.projection_bind_group, 0, null);
-        c.wgpuRenderPassEncoderSetVertexBuffer(rpass, 0, particle_buffer, 0, particle_count * @sizeOf(particle_defs.Particle));
-        c.wgpuRenderPassEncoderDraw(rpass, particle_count, 1, 0, 0);
+
+        const buffer_size_for_draw = if (particle_count > 0) particle_count * @sizeOf(particle_defs.Particle) else 0;
+        c.wgpuRenderPassEncoderSetVertexBuffer(rpass, 0, particle_buffer, 0, buffer_size_for_draw);
+
+        if (particle_count > 0) {
+            c.wgpuRenderPassEncoderDraw(rpass, particle_count, 1, 0, 0); // Draw particle_count points, 1 instance
+        } else {
+            c.wgpuRenderPassEncoderDraw(rpass, 0, 0, 0, 0); // Draw nothing
+        }
     }
 };

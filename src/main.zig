@@ -103,18 +103,11 @@ fn setup_wgpu(window: *c.SDL_Window) !void {
         .userdata1 = null, // This will be passed as the first userdata to the callback
         .userdata2 = null, // This will be passed as the second userdata to the callback
     };
-    _ = c.wgpuInstanceRequestAdapter(wgpu_instance.?, &adapter_options, adapter_callback_info);
-    // Note: In a real app, you'd likely have a mechanism to wait for these async callbacks.
-    // For this example, we'll assume they complete quickly or use a simpler synchronous approach if available/faked.
-    // For simplicity here, we'll proceed as if they are synchronous. This is NOT robust.
-    // A proper solution would involve event loops or polling for completion.
-    // The build script might be linking a wgpu version that allows for sync init on native.
-    // Let's assume wgpuInstanceProcessEvents or similar would be called in a loop until wgpu_adapter is set.
-    // These functions now return WGPUFuture.
-    // For this simple example, we are not explicitly handling the future,
-    // relying on the small sleep. A robust app would poll/wait.
     _ = c.wgpuInstanceRequestAdapter(wgpu_instance.?, &adapter_options, adapter_callback_info); // Assign to _ to acknowledge return
     // Deferring future drop removed as function is not available
+    // Note: In a real app, you'd likely have a mechanism to wait for these async callbacks,
+    // or ensure wgpuInstanceProcessEvents is called if using that callback mode.
+    // For this example, we are relying on a small sleep after this single call.
 
     if (wgpu_adapter == null) { // Poll until adapter is set (simplified)
         // If using ProcessEvents mode, you would call wgpuInstanceProcessEvents here in a loop.
@@ -202,7 +195,7 @@ fn setup_wgpu(window: *c.SDL_Window) !void {
         .usage = c.WGPUTextureUsage_RenderAttachment,
         .viewFormatCount = 0, // zig v0.12
         .viewFormats = null, // zig v0.12
-        .alphaMode = c.WGPUCompositeAlphaMode_Premultiplied, // Or .Opaque
+        .alphaMode = c.WGPUCompositeAlphaMode_Opaque,
         .width = @intCast(current_width),
         .height = @intCast(current_height),
         .presentMode = c.WGPUPresentMode_Fifo, // Or .Mailbox for lower latency
@@ -214,8 +207,8 @@ fn reconfigure_surface() void {
     if (wgpu_surface != null and wgpu_device != null) {
         wgpu_surface_config.width = @intCast(current_width);
         wgpu_surface_config.height = @intCast(current_height);
-        sim_params.canvas_width = @as(f32, current_width);
-        sim_params.canvas_height = @as(f32, current_height);
+        sim_params.canvas_width = @floatFromInt(current_width);
+        sim_params.canvas_height = @floatFromInt(current_height);
         c.wgpuSurfaceConfigure(wgpu_surface.?, &wgpu_surface_config);
     }
 }
@@ -245,9 +238,6 @@ fn switch_simulation_method(new_method: SimulationMethod) !void {
         },
         .gpu => {
             // Check if compute shaders are supported (simplified check)
-            var features: c.WGPUAdapterProperties = undefined;
-            c.wgpuAdapterGetProperties(wgpu_adapter.?, &features);
-            // This isn't a direct check for compute support from properties.
             // A proper check involves wgpuDeviceGetLimits and checking compute-related limits.
             // For now, assume it's available if not on web without WebGPU.
             gpu_sim = try simulation_gpu.GpuSimulation.init(allocator, device, ui_particle_count, sim_params.canvas_width, sim_params.canvas_height);
@@ -303,7 +293,7 @@ pub fn main() !void {
         std.log.err("ImGui_ImplSDL3_InitForWGPU failed", .{});
         std.process.exit(1);
     }
-    defer c.ImGui_ImplSDL3_Shutdown();
+    defer c.cImGui_ImplSDL3_Shutdown();
 
     // Construct the init info struct
     var imgui_wgpu_init_info = c.ImGui_ImplWGPU_InitInfo_t{
@@ -324,7 +314,7 @@ pub fn main() !void {
         std.log.err("ImGui_ImplWGPU_Init failed", .{});
         std.process.exit(1);
     }
-    defer c.ImGui_ImplWGPU_Shutdown();
+    defer c.cImGui_ImplWGPU_Shutdown();
 
     // Setup Renderer
     particle_renderer = try renderer_2d.ParticleRenderer.init(allocator, wgpu_device.?, preferred_surface_format); // .? to pass *Impl
@@ -339,16 +329,17 @@ pub fn main() !void {
 
     while (running) {
         const current_frame_time = std.time.nanoTimestamp();
-        sim_params.delta_time = @as(f32, current_frame_time - last_frame_time) / 1.0e9;
+        const delta: f32 = @as(f32, @floatFromInt(current_frame_time - last_frame_time)) / 1.0e9;
+        sim_params.delta_time = delta;
         last_frame_time = current_frame_time;
         if (sim_params.delta_time > 0.1) sim_params.delta_time = 0.1; // Cap delta time
 
-        while (c.SDL_PollEvent(&event) != 0) {
-            _ = c.ImGui_ImplSDL3_ProcessEvent(&event);
+        while (c.SDL_PollEvent(&event)) {
+            _ = c.cImGui_ImplSDL3_ProcessEvent(&event);
             switch (event.type) {
                 c.SDL_EVENT_QUIT => running = false,
                 c.SDL_EVENT_WINDOW_RESIZED, c.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
-                    c.SDL_GetWindowSizeInPixels(window, &current_width, &current_height);
+                    _ = c.SDL_GetWindowSizeInPixels(window, &current_width, &current_height); // Explicitly ignore return value
                     reconfigure_surface();
                 },
                 else => {},
@@ -357,32 +348,32 @@ pub fn main() !void {
         if (!running) break;
 
         // ImGui New Frame
-        c.ImGui_ImplWGPU_NewFrame();
-        c.ImGui_ImplSDL3_NewFrame();
+        c.cImGui_ImplWGPU_NewFrame();
+        c.cImGui_ImplSDL3_NewFrame();
         c.ImGui_NewFrame();
 
         // --- ImGui UI ---
         if (c.ImGui_Begin("Controls", null, 0)) {
-            c.ImGui_Text("Particle Count: %u", .{ui_particle_count});
-            if (c.ImGui_SliderScalar("##particle_count_slider", .Uint, &ui_particle_count, &@as(u32, 1000), &@as(u32, 500_000), "%u", 0)) {
+            c.ImGui_Text("Particle Count: %u", ui_particle_count);
+            if (c.ImGui_SliderScalarEx("##particle_count_slider", c.ImGuiDataType_U32, &ui_particle_count, &@as(u32, 1000), &@as(u32, 500_000), "%u", 0)) {
                 resize_simulation_buffers() catch |err| std.log.err("Failed to resize sim: {any}", .{err});
             }
 
-            if (c.ImGui_RadioButton_BoolStr("CPU", current_sim_method == .cpu)) {
+            if (c.ImGui_RadioButton("CPU", current_sim_method == .cpu)) {
                 switch_simulation_method(.cpu) catch |err| std.log.err("Failed to switch to CPU: {any}", .{err});
             }
-            c.ImGui_SameLine(0, -1);
-            if (c.ImGui_RadioButton_BoolStr("GPU", current_sim_method == .gpu)) {
+            c.ImGui_SameLineEx(0.0, -1.0);
+            if (c.ImGui_RadioButton("GPU", current_sim_method == .gpu)) {
                 switch_simulation_method(.gpu) catch |err| std.log.err("Failed to switch to GPU: {any}", .{err});
             }
 
-            c.ImGui_SliderFloat("Mouse Force", &sim_params.mouse_force, 10.0, 1000.0, "%.1f", 0);
-            c.ImGui_SliderFloat("Mouse Radius", &sim_params.mouse_radius, 10.0, 500.0, "%.1f", 0);
-            c.ImGui_SliderFloat("Damping", &sim_params.damping, 0.8, 1.0, "%.3f", 0);
-            c.ImGui_Checkbox("Paused", &paused);
+            _ = c.ImGui_SliderFloatEx("Mouse Force", &sim_params.mouse_force, 10.0, 1000.0, "%.1f", 0);
+            _ = c.ImGui_SliderFloatEx("Mouse Radius", &sim_params.mouse_radius, 10.0, 500.0, "%.1f", 0);
+            _ = c.ImGui_SliderFloatEx("Damping", &sim_params.damping, 0.8, 1.0, "%.3f", 0);
+            _ = c.ImGui_Checkbox("Paused", &paused);
 
-            c.ImGui_Text("DeltaTime: %.4f s", .{sim_params.delta_time});
-            c.ImGui_Text("FPS: %.1f", .{1.0 / sim_params.delta_time});
+            c.ImGui_Text("DeltaTime: %.4f s", sim_params.delta_time);
+            c.ImGui_Text("FPS: %.1f", @as(f64, 1.0 / sim_params.delta_time));
         }
         c.ImGui_End();
         // --- End ImGui UI ---
@@ -401,7 +392,8 @@ pub fn main() !void {
                 .cpu => if (cpu_sim) |*sim| sim.update(queue, &sim_params),
                 .gpu => if (gpu_sim) |*comp_sim| {
                     const device = wgpu_device orelse @panic("WGPU device not initialized for compute encoder");
-                    const cmd_encoder_desc = c.WGPUCommandEncoderDescriptor{ .label = "Compute Encoder" };
+                    const compute_encoder_label_str = "Compute Encoder";
+                    const cmd_encoder_desc = c.WGPUCommandEncoderDescriptor{ .label = .{ .data = compute_encoder_label_str.ptr, .length = compute_encoder_label_str.len } };
                     const comp_encoder = c.wgpuDeviceCreateCommandEncoder(device, &cmd_encoder_desc); // Pass device directly
                     comp_sim.update(queue, comp_encoder.?, &sim_params); // Pass unwrapped encoder
                     const comp_cmd_buffer = c.wgpuCommandEncoderFinish(comp_encoder.?, null);
@@ -422,13 +414,13 @@ pub fn main() !void {
         // if (@hasDecl(c, "wgpuSurfaceCapabilitiesFreeMembers")) {
         //     defer c.wgpuSurfaceCapabilitiesFreeMembers(&capabilities);
         // }
-        if (surface_texture.status != .Success) {
+        if (surface_texture.status != c.WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal) {
             std.log.warn("wgpuSurfaceGetCurrentTexture failed with status {any}, reconfiguring.", .{surface_texture.status});
             if (surface_texture.texture != null) c.wgpuTextureRelease(surface_texture.texture);
             // Surface might be lost, try to reconfigure. Might need to skip a frame.
             reconfigure_surface();
             c.wgpuSurfaceGetCurrentTexture(wgpu_surface.?, &surface_texture); // try again
-            if (surface_texture.status != .Success) { // if still fails, skip frame
+            if (surface_texture.status != c.WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal) { // if still fails, skip frame
                 if (surface_texture.texture != null) c.wgpuTextureRelease(surface_texture.texture);
                 continue;
             }
@@ -441,26 +433,46 @@ pub fn main() !void {
         const device = wgpu_device orelse @panic("WGPU device not initialized for render encoder");
         const queue = wgpu_queue orelse @panic("WGPU queue not initialized for render");
 
-        const cmd_encoder_desc = c.WGPUCommandEncoderDescriptor{ .label = "Main Render Encoder" };
+        const render_encoder_label_str = "Main Render Encoder";
+        const cmd_encoder_desc = c.WGPUCommandEncoderDescriptor{ .label = .{ .data = render_encoder_label_str.ptr, .length = render_encoder_label_str.len } };
         const encoder = c.wgpuDeviceCreateCommandEncoder(device, &cmd_encoder_desc); // Pass device directly
-        defer c.wgpuCommandEncoderRelease(encoder.?);
 
-        // Render particles
+        // --- Render Particles ---
         const particle_buffer_to_render = switch (current_sim_method) {
             .cpu => cpu_sim.?.particle_buffer,
             .gpu => gpu_sim.?.particle_buffer,
         };
         particle_renderer.render(queue, encoder.?, target_view.?, particle_buffer_to_render, sim_params.particle_count, sim_params.canvas_width, sim_params.canvas_height);
 
-        // Render ImGui
+        // --- Render ImGui in a new pass ---
         c.ImGui_Render();
-        c.ImGui_ImplWGPU_RenderDrawData(c.ImGui_GetDrawData(), encoder.?);
+        const imgui_render_pass_color_attachment = c.WGPURenderPassColorAttachment{
+            .view = target_view.?, // Use the same target view
+            .resolveTarget = null,
+            .loadOp = c.WGPULoadOp_Load, // Load previous contents (particles)
+            .storeOp = c.WGPUStoreOp_Store,
+            .clearValue = c.WGPUColor{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0 }, // Clear color not strictly needed due to LoadOp
+        };
+        const imgui_render_pass_label_str = "ImGui Render Pass";
+        const imgui_render_pass_desc = c.WGPURenderPassDescriptor{
+            .label = .{ .data = imgui_render_pass_label_str.ptr, .length = imgui_render_pass_label_str.len },
+            .colorAttachmentCount = 1,
+            .colorAttachments = &imgui_render_pass_color_attachment,
+            .depthStencilAttachment = null,
+            .timestampWrites = null,
+        };
+
+        const imgui_rpass = c.wgpuCommandEncoderBeginRenderPass(encoder.?, &imgui_render_pass_desc);
+        c.cImGui_ImplWGPU_RenderDrawData(c.ImGui_GetDrawData(), imgui_rpass);
+        c.wgpuRenderPassEncoderEnd(imgui_rpass);
+        // --- End ImGui Render Pass ---
 
         const cmd_buffer = c.wgpuCommandEncoderFinish(encoder.?, null);
         c.wgpuQueueSubmit(queue, 1, &cmd_buffer);
         c.wgpuCommandBufferRelease(cmd_buffer);
+        c.wgpuCommandEncoderRelease(encoder.?); // Release after use
 
-        c.wgpuSurfacePresent(wgpu_surface.?);
+        _ = c.wgpuSurfacePresent(wgpu_surface.?);
 
         // Process WGPU events (important for callbacks and internal operations)
         // c.wgpuInstanceProcessEvents(wgpu_instance.?); // If using async instance
@@ -469,5 +481,10 @@ pub fn main() !void {
     // Cleanup simulations
     if (cpu_sim) |*sim| sim.deinit();
     if (gpu_sim) |*sim| sim.deinit();
-    try gpa.deinit();
+
+    const deinit_check = gpa.deinit();
+    if (deinit_check == .leak) {
+        std.log.warn("Memory leak detected by GeneralPurposeAllocator!", .{});
+        // Optionally, consider std.process.exit(1) if leaks are critical.
+    }
 }

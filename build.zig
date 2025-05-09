@@ -48,15 +48,22 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) 
     return &sdl_make_cmd.step;
 }
 
-fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step {
+fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) *std.Build.Step {
     const wgpu_native_dir = "external/wgpu-native";
-    const wgpu_native_build_dir = wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/release";
 
-    const wgpu_native_make_cmd = b.addSystemCommand(&.{ "make", "lib-native-release", "-C", wgpu_native_dir, if (IS_NATIVE_BUILD) "EXTRA_RUSTFLAGS=-Ctarget-cpu=native" else "" });
+    var wgpu_native_make_cmd: *std.Build.Step.Run = undefined;
+
+    const rustflags = if (IS_NATIVE_BUILD) "EXTRA_RUSTFLAGS=-Ctarget-cpu=native" else "";
+
+    if (optimize == .Debug) {
+        wgpu_native_make_cmd = b.addSystemCommand(&.{ "make", "lib-native", "-C", wgpu_native_dir, rustflags });
+        exe.addObjectFile(b.path(wgpu_native_dir ++ "/target/debug/libwgpu_native.a"));
+    } else {
+        wgpu_native_make_cmd = b.addSystemCommand(&.{ "make", "lib-native-release", "-C", wgpu_native_dir, rustflags });
+        exe.addObjectFile(b.path(wgpu_native_dir ++ "target/x86_64-unknown-linux-gnu/release/libwgpu_native.a"));
+    }
 
     exe.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
-
-    exe.addObjectFile(b.path(wgpu_native_build_dir ++ "/libwgpu_native.a"));
 
     return &wgpu_native_make_cmd.step;
 }
@@ -272,7 +279,7 @@ fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.
 
     switch (webgpu_backend) {
         .@"wgpu-native" => {
-            const wgpu_native_make_step = make_wgpu_native(b, exe);
+            const wgpu_native_make_step = make_wgpu_native(b, exe, optimize);
             make_deps_step.dependOn(wgpu_native_make_step);
 
             exe.root_module.addCMacro("IMGUI_IMPL_WEBGPU_BACKEND_WGPU", "");

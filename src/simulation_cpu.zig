@@ -29,7 +29,7 @@ pub const CpuSimulation = struct {
             .usage = c.WGPUBufferUsage_Vertex | c.WGPUBufferUsage_CopyDst,
             .mappedAtCreation = 0, // Use 0 for bool false
         };
-        self.particle_buffer = c.wgpuDeviceCreateBuffer(device, &buffer_desc);
+        self.particle_buffer = c.wgpuDeviceCreateBuffer(device, &buffer_desc) orelse return error.BufferCreationFailed; // Or @panic
         c.wgpuQueueWriteBuffer(c.wgpuDeviceGetQueue(device), self.particle_buffer, 0, self.particles.ptr, self.particles.len * @sizeOf(particle_defs.Particle));
 
         return self;
@@ -62,7 +62,7 @@ pub const CpuSimulation = struct {
             .usage = c.WGPUBufferUsage_Vertex | c.WGPUBufferUsage_CopyDst,
             .mappedAtCreation = 0, // Use 0 for bool false
         };
-        self.particle_buffer = c.wgpuDeviceCreateBuffer(device, &buffer_desc);
+        self.particle_buffer = c.wgpuDeviceCreateBuffer(device, &buffer_desc) orelse return error.BufferCreationFailed;
         c.wgpuQueueWriteBuffer(queue, self.particle_buffer, 0, self.particles.ptr, self.particles.len * @sizeOf(particle_defs.Particle));
     }
 

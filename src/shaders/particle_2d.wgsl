@@ -1,25 +1,16 @@
-struct Particle {
-    pos: vec2<f32>,
-    _pad_pos: vec2<f32>,
-    vel: vec2<f32>,
-    _pad_vel: vec2<f32>,
-    color: vec4<f32>,
-    initial_color: vec4<f32>,
-};
-
 struct ProjectionUniforms {
     matrix: mat4x4<f32>,
 };
-
 @group(0) @binding(0) var<uniform> projection: ProjectionUniforms;
 
+// Input attributes for each particle vertex.
+// These @location decorators must match the shaderLocation
+// in the WGPUVertexAttribute array in renderer_2d.zig.
 struct VertexInput {
-    @location(0) pos: vec2<f32>,
-    // _pad_pos is implicitly skipped by next attribute's offset
-    @location(1) vel: vec2<f32>, // offset by 16 bytes (pos + _pad_pos)
-    // _pad_vel implicitly skipped
-    @location(2) color: vec4<f32>, // offset by 32 bytes (pos + _pad_pos + vel + _pad_vel)
-    @location(3) initial_color: vec4<f32>, // offset by 48 bytes
+    @location(0) pos: vec2<f32>,     // from Particle.pos
+    // @location(1) vel: vec2<f32>,  // from Particle.vel - uncomment if used
+    @location(2) color: vec4<f32>, // from Particle.color
+    // @location(3) initial_color: vec4<f32>, // from Particle.initial_color - uncomment if used
 };
 
 struct VertexOutput {
@@ -31,7 +22,7 @@ struct VertexOutput {
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     out.clip_position = projection.matrix * vec4<f32>(in.pos, 0.0, 1.0);
-    out.color = in.color;
+    out.color = in.color; // Pass through the particle's color
     return out;
 }
 
