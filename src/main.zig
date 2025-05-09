@@ -36,6 +36,91 @@ var current_sim_method: SimulationMethod = .gpu; // Default to GPU if available
 var cpu_sim: ?simulation_cpu.CpuSimulation = null;
 var gpu_sim: ?simulation_gpu.GpuSimulation = null;
 
+inline fn setupImGuiStyle(alpha_for_transparent_items: f32) void {
+    const style_ptr = c.ImGui_GetStyle();
+    if (style_ptr == null) {
+        std.log.warn("ImGui_GetStyle() returned null, cannot apply custom style.", .{});
+        return;
+    }
+    var style = style_ptr.*; // Make a mutable copy to work with
+
+    style.Alpha = 1.0; // Overall alpha for the ImGui context
+    style.FrameRounding = 3.0;
+    style.WindowRounding = 3.0; // Add window rounding
+
+    style.Colors[c.ImGuiCol_Text] = c.ImVec4{ .x = 0.00, .y = 0.00, .z = 0.00, .w = 1.00 };
+    style.Colors[c.ImGuiCol_TextDisabled] = c.ImVec4{ .x = 0.60, .y = 0.60, .z = 0.60, .w = 1.00 };
+    style.Colors[c.ImGuiCol_WindowBg] = c.ImVec4{ .x = 0.94, .y = 0.94, .z = 0.94, .w = 1.00 }; // Made opaque
+    style.Colors[c.ImGuiCol_ChildBg] = c.ImVec4{ .x = 0.00, .y = 0.00, .z = 0.00, .w = 0.00 };
+    style.Colors[c.ImGuiCol_PopupBg] = c.ImVec4{ .x = 1.00, .y = 1.00, .z = 1.00, .w = 1.00 }; // Made opaque
+    style.Colors[c.ImGuiCol_Border] = c.ImVec4{ .x = 0.00, .y = 0.00, .z = 0.00, .w = 0.39 };
+    style.Colors[c.ImGuiCol_BorderShadow] = c.ImVec4{ .x = 1.00, .y = 1.00, .z = 1.00, .w = 0.10 };
+    style.Colors[c.ImGuiCol_FrameBg] = c.ImVec4{ .x = 0.90, .y = 0.90, .z = 0.90, .w = 1.00 }; // Adjusted for better dark mode contrast
+    style.Colors[c.ImGuiCol_FrameBgHovered] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 0.40 };
+    style.Colors[c.ImGuiCol_FrameBgActive] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 0.67 };
+    style.Colors[c.ImGuiCol_TitleBg] = c.ImVec4{ .x = 0.96, .y = 0.96, .z = 0.96, .w = 1.00 };
+    style.Colors[c.ImGuiCol_TitleBgCollapsed] = c.ImVec4{ .x = 1.00, .y = 1.00, .z = 1.00, .w = 0.51 };
+    style.Colors[c.ImGuiCol_TitleBgActive] = c.ImVec4{ .x = 0.82, .y = 0.82, .z = 0.82, .w = 1.00 };
+    style.Colors[c.ImGuiCol_MenuBarBg] = c.ImVec4{ .x = 0.86, .y = 0.86, .z = 0.86, .w = 1.00 };
+    style.Colors[c.ImGuiCol_ScrollbarBg] = c.ImVec4{ .x = 0.98, .y = 0.98, .z = 0.98, .w = 0.53 };
+    style.Colors[c.ImGuiCol_ScrollbarGrab] = c.ImVec4{ .x = 0.69, .y = 0.69, .z = 0.69, .w = 1.00 };
+    style.Colors[c.ImGuiCol_ScrollbarGrabHovered] = c.ImVec4{ .x = 0.59, .y = 0.59, .z = 0.59, .w = 1.00 };
+    style.Colors[c.ImGuiCol_ScrollbarGrabActive] = c.ImVec4{ .x = 0.49, .y = 0.49, .z = 0.49, .w = 1.00 };
+    style.Colors[c.ImGuiCol_CheckMark] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 1.00 };
+    style.Colors[c.ImGuiCol_SliderGrab] = c.ImVec4{ .x = 0.24, .y = 0.52, .z = 0.88, .w = 1.00 };
+    style.Colors[c.ImGuiCol_SliderGrabActive] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 1.00 };
+    style.Colors[c.ImGuiCol_Button] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 0.40 };
+    style.Colors[c.ImGuiCol_ButtonHovered] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 1.00 };
+    style.Colors[c.ImGuiCol_ButtonActive] = c.ImVec4{ .x = 0.06, .y = 0.53, .z = 0.98, .w = 1.00 };
+    style.Colors[c.ImGuiCol_Header] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 0.31 };
+    style.Colors[c.ImGuiCol_HeaderHovered] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 0.80 };
+    style.Colors[c.ImGuiCol_HeaderActive] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 1.00 };
+    style.Colors[c.ImGuiCol_Separator] = c.ImVec4{ .x = 0.39, .y = 0.39, .z = 0.39, .w = 1.00 };
+    style.Colors[c.ImGuiCol_SeparatorHovered] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 0.78 };
+    style.Colors[c.ImGuiCol_SeparatorActive] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 1.00 };
+    style.Colors[c.ImGuiCol_ResizeGrip] = c.ImVec4{ .x = 1.00, .y = 1.00, .z = 1.00, .w = 0.50 };
+    style.Colors[c.ImGuiCol_ResizeGripHovered] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 0.67 };
+    style.Colors[c.ImGuiCol_ResizeGripActive] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 0.95 };
+    style.Colors[c.ImGuiCol_Tab] = c.ImVec4{ .x = 0.59, .y = 0.59, .z = 0.59, .w = 0.50 }; // Mapped from C++ CloseButton
+    style.Colors[c.ImGuiCol_TabHovered] = c.ImVec4{ .x = 0.98, .y = 0.39, .z = 0.36, .w = 1.00 }; // Mapped from C++ CloseButtonHovered
+    style.Colors[c.ImGuiCol_TabSelected] = c.ImVec4{ .x = 0.98, .y = 0.39, .z = 0.36, .w = 1.00 }; // Mapped from C++ CloseButtonActive
+    // The following Tab states are not in the C++ style, using reasonable defaults or derivations
+    style.Colors[c.ImGuiCol_TabSelectedOverline] = style.Colors[c.ImGuiCol_TabSelected]; // Or a more prominent color
+    style.Colors[c.ImGuiCol_TabDimmed] = style.Colors[c.ImGuiCol_Tab]; // Or a dimmer version
+    style.Colors[c.ImGuiCol_TabDimmedSelected] = style.Colors[c.ImGuiCol_TabSelected];
+    style.Colors[c.ImGuiCol_TabDimmedSelectedOverline] = style.Colors[c.ImGuiCol_TabSelectedOverline];
+
+    style.Colors[c.ImGuiCol_TextSelectedBg] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 0.35 };
+    style.Colors[c.ImGuiCol_ModalWindowDimBg] = c.ImVec4{ .x = 0.20, .y = 0.20, .z = 0.20, .w = 0.35 };
+
+    var i: c_int = 0;
+    while (i < c.ImGuiCol_COUNT) : (i += 1) {
+        var h: f32 = undefined;
+        var s: f32 = undefined;
+        var v: f32 = undefined;
+
+        const original_w = style.Colors[@intCast(i)].w;
+        const color_component_r = style.Colors[@intCast(i)].x;
+        const color_component_g = style.Colors[@intCast(i)].y;
+        const color_component_b = style.Colors[@intCast(i)].z;
+
+        c.ImGui_ColorConvertRGBtoHSV(color_component_r, color_component_g, color_component_b, &h, &s, &v);
+
+        if (s < 0.1) { // For greyscale colors, invert lightness
+            v = 1.0 - v;
+        }
+        c.ImGui_ColorConvertHSVtoRGB(h, s, v, &style.Colors[@intCast(i)].x, &style.Colors[@intCast(i)].y, &style.Colors[@intCast(i)].z);
+
+        // Apply alpha multiplier only to colors that were originally transparent
+        if (original_w < 1.0) {
+            style.Colors[@intCast(i)].w = original_w * alpha_for_transparent_items;
+        } else { // If it was originally opaque, keep it opaque
+            style.Colors[@intCast(i)].w = 1.0; // Ensure it's fully opaque if it started as such
+        }
+    }
+    style_ptr.* = style;
+}
+
 // UI State
 var sim_params: particle_defs.SimParams = .{
     .delta_time = 1.0 / 60.0,
@@ -315,6 +400,9 @@ pub fn main() !void {
         std.process.exit(1);
     }
     defer c.cImGui_ImplWGPU_Shutdown();
+
+    // Apply custom ImGui style (e.g., dark style with full alpha modification)
+    setupImGuiStyle(1.0);
 
     // Setup Renderer
     particle_renderer = try renderer_2d.ParticleRenderer.init(allocator, wgpu_device.?, preferred_surface_format); // .? to pass *Impl
