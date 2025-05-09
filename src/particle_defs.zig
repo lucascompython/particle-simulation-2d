@@ -44,10 +44,8 @@ pub fn generate_initial_particles(allocator: std.mem.Allocator, count: u32, widt
     var rng = std.Random.DefaultPrng.init(0); // Seed for deterministic results
 
     for (0..count) |i| {
-        const angle = rng.random().float(f32) * 2.0 * std.math.pi;
-        const radius = rng.random().float(f32) * (@min(width, height) / 3.0);
-        const pos_x = width / 2.0 + @cos(angle) * radius;
-        const pos_y = height / 2.0 + @sin(angle) * radius;
+        const pos_x = rng.random().float(f32) * width;  // Random X within 0 to width
+        const pos_y = rng.random().float(f32) * height; // Random Y within 0 to height
 
         const vel_x = (rng.random().float(f32) - 0.5) * 2.0; // Random velocity between -1 and 1
         const vel_y = (rng.random().float(f32) - 0.5) * 2.0;
