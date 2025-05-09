@@ -36,7 +36,7 @@ var current_sim_method: SimulationMethod = .gpu; // Default to GPU if available
 var cpu_sim: ?simulation_cpu.CpuSimulation = null;
 var gpu_sim: ?simulation_gpu.GpuSimulation = null;
 
-inline fn setupImGuiStyle(alpha_for_transparent_items: f32) void {
+inline fn setupImGuiStyle() void {
     const style_ptr = c.ImGui_GetStyle();
     if (style_ptr == null) {
         std.log.warn("ImGui_GetStyle() returned null, cannot apply custom style.", .{});
@@ -55,7 +55,7 @@ inline fn setupImGuiStyle(alpha_for_transparent_items: f32) void {
     style.Colors[c.ImGuiCol_PopupBg] = c.ImVec4{ .x = 1.00, .y = 1.00, .z = 1.00, .w = 1.00 }; // Made opaque
     style.Colors[c.ImGuiCol_Border] = c.ImVec4{ .x = 0.00, .y = 0.00, .z = 0.00, .w = 0.39 };
     style.Colors[c.ImGuiCol_BorderShadow] = c.ImVec4{ .x = 1.00, .y = 1.00, .z = 1.00, .w = 0.10 };
-    style.Colors[c.ImGuiCol_FrameBg] = c.ImVec4{ .x = 0.90, .y = 0.90, .z = 0.90, .w = 1.00 }; // Adjusted for better dark mode contrast
+    style.Colors[c.ImGuiCol_FrameBg] = c.ImVec4{ .x = 0.75, .y = 0.75, .z = 0.75, .w = 1.00 }; // Further adjusted for dark mode contrast
     style.Colors[c.ImGuiCol_FrameBgHovered] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 0.40 };
     style.Colors[c.ImGuiCol_FrameBgActive] = c.ImVec4{ .x = 0.26, .y = 0.59, .z = 0.98, .w = 0.67 };
     style.Colors[c.ImGuiCol_TitleBg] = c.ImVec4{ .x = 0.96, .y = 0.96, .z = 0.96, .w = 1.00 };
@@ -113,7 +113,7 @@ inline fn setupImGuiStyle(alpha_for_transparent_items: f32) void {
 
         // Apply alpha multiplier only to colors that were originally transparent
         if (original_w < 1.0) {
-            style.Colors[@intCast(i)].w = original_w * alpha_for_transparent_items;
+            style.Colors[@intCast(i)].w = original_w;
         } else { // If it was originally opaque, keep it opaque
             style.Colors[@intCast(i)].w = 1.0; // Ensure it's fully opaque if it started as such
         }
@@ -402,7 +402,7 @@ pub fn main() !void {
     defer c.cImGui_ImplWGPU_Shutdown();
 
     // Apply custom ImGui style (e.g., dark style with full alpha modification)
-    setupImGuiStyle(1.0);
+    setupImGuiStyle();
 
     // Setup Renderer
     particle_renderer = try renderer_2d.ParticleRenderer.init(allocator, wgpu_device.?, preferred_surface_format); // .? to pass *Impl
