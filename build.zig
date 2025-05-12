@@ -60,7 +60,7 @@ fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.b
         exe.addObjectFile(b.path(wgpu_native_dir ++ "/target/debug/libwgpu_native.a"));
     } else {
         wgpu_native_make_cmd = b.addSystemCommand(&.{ "make", "lib-native-release", "-C", wgpu_native_dir, rustflags });
-        exe.addObjectFile(b.path(wgpu_native_dir ++ "target/x86_64-unknown-linux-gnu/release/libwgpu_native.a"));
+        exe.addObjectFile(b.path(wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/release/libwgpu_native.a"));
     }
 
     exe.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
