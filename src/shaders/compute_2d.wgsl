@@ -71,10 +71,11 @@ fn main_cs(@builtin(global_invocation_id) global_id: vec3<u32>) {
         p.vel.y *= -1.0;
     }
     
-    // Example: Color by speed (can be more sophisticated)
-    // let speed = length(p.vel);
-    // let normalized_speed = clamp(speed / 10.0, 0.0, 1.0); 
-    // p.color = vec4<f32>(normalized_speed, 1.0 - normalized_speed, 0.5, 1.0);
+    // Color by speed
+    let speed = length(p.vel);
+    // Normalize speed - you might need to adjust the divisor (5.0) based on typical speeds
+    let normalized_speed = clamp(speed / 5.0, 0.0, 1.0); 
+    p.color = vec4<f32>(normalized_speed, 0.5 - normalized_speed * 0.5, 1.0 - normalized_speed, 1.0);
 
     particles[index] = p;
 }

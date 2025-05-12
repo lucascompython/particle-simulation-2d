@@ -110,12 +110,16 @@ pub const CpuSimulation = struct {
                 p.vel[1] *= -1.0;
             }
 
-            // Example: Color by speed
-            // const speed_sq = p.vel[0]*p.vel[0] + p.vel[1]*p.vel[1];
-            // const normalized_speed = @sqrt(speed_sq) / 10.0; // Normalize based on typical max speed
-            // p.color[0] = @floatClamp(normalized_speed, 0.0, 1.0);
-            // p.color[1] = @floatClamp(1.0 - normalized_speed, 0.0, 1.0);
-            // p.color[2] = 0.5; // Some base blue
+            // Color by speed
+            const speed_sq = p.vel[0] * p.vel[0] + p.vel[1] * p.vel[1];
+            const speed = @sqrt(speed_sq);
+            // Normalize speed - adjust divisor (5.0) as needed, matching the 3D example
+            const normalized_speed = std.math.clamp(speed / 5.0, 0.0, 1.0);
+            
+            p.color[0] = normalized_speed; // R
+            p.color[1] = 0.5 - normalized_speed * 0.5; // G
+            p.color[2] = 1.0 - normalized_speed; // B
+            p.color[3] = 1.0; // A (assuming opaque)
         }
         c.wgpuQueueWriteBuffer(queue, self.particle_buffer, 0, self.particles.ptr, self.particles.len * @sizeOf(particle_defs.Particle));
     }
