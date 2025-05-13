@@ -3,8 +3,8 @@ const std = @import("std");
 const C_BASE_FLAGS = "-O3 -ffast-math -flto ";
 const C_MARCH_NATIVE = "-march=native";
 
-var C_FLAGS_ARR = [_][]const u8{ "-O3", "-ffast-math", "-flto", "" };
-var C_FLAGS_STR: [35]u8 = undefined;
+var C_FLAGS_STR: []u8 = undefined;
+var C_FLAGS_ARR: []const []const u8 = undefined;
 
 var IS_NATIVE_BUILD: bool = undefined;
 
@@ -26,7 +26,7 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) 
         "-DSDL_HIDAPI=OFF",
         "-DCMAKE_BUILD_TYPE=Release",
         "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
-        "-DCMAKE_C_FLAGS=" ++ C_FLAGS_STR,
+        b.fmt("-DCMAKE_C_FLAGS={s}", .{C_FLAGS_STR}),
         "-DSDL_SHARED=OFF",
         "-DSDL_STATIC=ON",
         "-DCMAKE_C_COMPILER=clang", // Has to be clang for lto to work between compilers since zig uses llvm, not sure how this works on windows
@@ -90,8 +90,8 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
         "-DCMAKE_C_COMPILER=clang",
         "-DCMAKE_CXX_COMPILER=clang++",
         "-DCMAKE_LINKER_TYPE=LLD",
-        "-DCMAKE_C_FLAGS=" ++ C_FLAGS_STR,
-        "-DCMAKE_CXX_FLAGS=" ++ C_FLAGS_STR ++ " -stdlib=libc++", // apparently needs to explicitly link against clang's libc++ for some reason
+        b.fmt("-DCMAKE_C_FLAGS={s}", .{C_FLAGS_STR}),
+        b.fmt("-DCMAKE_CXX_FLAGS={s} -stdlib=libc++", .{C_FLAGS_STR}), // apparently needs to explicitly link against clang's libc++ for some reason
         "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
 
         "-DDAWN_BUILD_SAMPLES=OFF",
@@ -137,7 +137,7 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
 
 fn make_sdl3webgpu(b: *std.Build, exe: *std.Build.Step.Compile) void {
     exe.addIncludePath(b.path("external/sdl3webgpu"));
-    exe.addCSourceFile(.{ .file = b.path("external/sdl3webgpu/sdl3webgpu.c"), .flags = &C_FLAGS_ARR, .language = .c });
+    exe.addCSourceFile(.{ .file = b.path("external/sdl3webgpu/sdl3webgpu.c"), .flags = C_FLAGS_ARR, .language = .c });
 }
 
 fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
@@ -151,7 +151,7 @@ fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin
 
     exe.addCSourceFiles(.{
         .root = b.path(imgui_path),
-        .flags = &C_FLAGS_ARR,
+        .flags = C_FLAGS_ARR,
         .files = &[_][]const u8{
             "imgui.cpp",
             "imgui_demo.cpp",
@@ -202,11 +202,11 @@ fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.St
     exe.addIncludePath(b.path("external/imgui_config"));
 
     // compile dcimgui.cpp
-    exe.addCSourceFile(.{ .file = b.path(output_path ++ "/dcimgui.cpp"), .flags = &C_FLAGS_ARR, .language = .cpp });
+    exe.addCSourceFile(.{ .file = b.path(output_path ++ "/dcimgui.cpp"), .flags = C_FLAGS_ARR, .language = .cpp });
     // compile dcimgui_impl_sdl3.cpp
-    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_sdl3.cpp"), .flags = &C_FLAGS_ARR, .language = .cpp });
+    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_sdl3.cpp"), .flags = C_FLAGS_ARR, .language = .cpp });
     // compile dcimgui_impl_wgpu.cpp
-    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_wgpu.cpp"), .flags = &C_FLAGS_ARR, .language = .cpp });
+    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_wgpu.cpp"), .flags = C_FLAGS_ARR, .language = .cpp });
 
     return &gen_wgpu_bindings.step;
 }
@@ -296,7 +296,7 @@ fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -304,21 +304,23 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     IS_NATIVE_BUILD = target.query.isNative();
 
-    var mem: []u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&C_FLAGS_STR);
-    const allocator = fba.allocator();
-
     // Compile with -march=native when the zig build is also native
     if (IS_NATIVE_BUILD) {
-        C_FLAGS_ARR[3] = C_MARCH_NATIVE;
-
-        mem = allocator.alloc(u8, 35) catch @panic("Couldn't allocate");
-        @memcpy(mem, C_BASE_FLAGS ++ C_MARCH_NATIVE);
+        C_FLAGS_STR = try b.allocator.alloc(u8, C_BASE_FLAGS.len + C_MARCH_NATIVE.len);
+        @memcpy(C_FLAGS_STR, C_BASE_FLAGS ++ C_MARCH_NATIVE);
     } else {
-        mem = allocator.alloc(u8, 22) catch @panic("Couldn't allocate");
-        @memcpy(mem, C_BASE_FLAGS);
+        C_FLAGS_STR = try b.allocator.alloc(u8, C_BASE_FLAGS.len);
+        @memcpy(C_FLAGS_STR, C_BASE_FLAGS);
     }
-    defer b.allocator.free(mem);
+
+    var parts = std.mem.splitScalar(u8, C_FLAGS_STR, ' ');
+    var flags = std.ArrayList([]u8).init(b.allocator);
+
+    while (parts.next()) |part| {
+        try flags.append(@constCast(part));
+    }
+
+    C_FLAGS_ARR = try flags.toOwnedSlice();
 
     // Standard optimization options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
