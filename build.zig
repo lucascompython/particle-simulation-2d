@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const C_BASE_FLAGS = "-O3 -ffast-math -flto ";
+const C_BASE_FLAGS = "-O3 -ffast-math -flto";
 const C_MARCH_NATIVE = "-march=native";
 
 var C_FLAGS_STR: []u8 = undefined;
@@ -293,24 +293,15 @@ fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.
     }
 }
 
-// Although this function looks imperative, note that its job is to
-// declaratively construct a build graph that will be executed by an external
-// runner.
 pub fn build(b: *std.Build) !void {
-    // Standard target options allows the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
     IS_NATIVE_BUILD = target.query.isNative();
 
     // Compile with -march=native when the zig build is also native
     if (IS_NATIVE_BUILD) {
-        C_FLAGS_STR = try b.allocator.alloc(u8, C_BASE_FLAGS.len + C_MARCH_NATIVE.len);
-        @memcpy(C_FLAGS_STR, C_BASE_FLAGS ++ C_MARCH_NATIVE);
+        C_FLAGS_STR = b.fmt("{s} {s}", .{ C_BASE_FLAGS, C_MARCH_NATIVE });
     } else {
-        C_FLAGS_STR = try b.allocator.alloc(u8, C_BASE_FLAGS.len);
-        @memcpy(C_FLAGS_STR, C_BASE_FLAGS);
+        C_FLAGS_STR = @constCast(C_BASE_FLAGS);
     }
 
     var parts = std.mem.splitScalar(u8, C_FLAGS_STR, ' ');
@@ -322,9 +313,6 @@ pub fn build(b: *std.Build) !void {
 
     C_FLAGS_ARR = try flags.toOwnedSlice();
 
-    // Standard optimization options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
-    // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
     // We will also create a module for our other entry point, 'main.zig'.
@@ -340,8 +328,6 @@ pub fn build(b: *std.Build) !void {
         .unwind_tables = .none,
     });
 
-    // This creates another `std.Build.Step.Compile`, but this one builds an executable
-    // rather than a static library.
     const exe = b.addExecutable(.{
         .name = "particle_simulation_2d",
         .root_module = exe_mod,
