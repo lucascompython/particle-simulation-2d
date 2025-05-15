@@ -1,5 +1,9 @@
 const std = @import("std");
 
+// TODO: Add better support for building dependencies on debug mode on debug builds
+// TODO: Add support for Windows and WebAssembly
+
+// Flags used for defining C_FLAGS_STR and C_FLAGS_ARR
 const C_BASE_FLAGS = "-O3 -ffast-math -flto";
 const C_MARCH_NATIVE = "-march=native";
 
