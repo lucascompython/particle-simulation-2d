@@ -1,10 +1,12 @@
 const std = @import("std");
 
-// TODO: Add better support for building dependencies on debug mode on debug builds
 // TODO: Add support for Windows and WebAssembly
 
 // Flags used for defining C_FLAGS_STR and C_FLAGS_ARR
-const C_BASE_FLAGS = "-O3 -ffast-math -flto";
+const C_RELEASE_FLAGS = "-O3 -ffast-math -flto";
+const C_DEBUG_FLAGS = "-O0 -g";
+var CMAKE_BUILD_TYPE: []const u8 = undefined;
+var CMAKE_LTO: []const u8 = undefined;
 const C_MARCH_NATIVE = "-march=native";
 
 var C_FLAGS_STR: []u8 = undefined;
@@ -12,9 +14,17 @@ var C_FLAGS_ARR: []const []const u8 = undefined;
 
 var IS_NATIVE_BUILD: bool = undefined;
 
+inline fn join(b: *std.Build, str_a: []const u8, str_b: []const u8) []u8 {
+    return b.pathJoin(&[_][]const u8{ str_a, str_b });
+}
+
+inline fn path_join(b: *std.Build, str_a: []const u8, str_b: []const u8) std.Build.LazyPath {
+    return b.path(join(b, str_a, str_b));
+}
+
 fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) *std.Build.Step {
     const sdl_src_dir = "external/SDL3";
-    const sdl_build_dir = sdl_src_dir ++ "/build";
+    const sdl_build_dir = join(b, sdl_src_dir ++ "/build", CMAKE_BUILD_TYPE);
 
     const sdl_cmake_cmd = b.addSystemCommand(&.{
         "cmake",
@@ -28,26 +38,26 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) 
         "-DSDL_RENDER=OFF",
         "-DSDL_POWER=OFF",
         "-DSDL_HIDAPI=OFF",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
+        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{CMAKE_BUILD_TYPE}),
+        b.fmt("-DCMAKE_INTERPROCEDURAL_OPTIMIZATION={s}", .{CMAKE_LTO}),
         b.fmt("-DCMAKE_C_FLAGS={s}", .{C_FLAGS_STR}),
         "-DSDL_SHARED=OFF",
         "-DSDL_STATIC=ON",
         "-DCMAKE_C_COMPILER=clang", // Has to be clang for lto to work between compilers since zig uses llvm, not sure how this works on windows
         "-DCMAKE_LINKER_TYPE=LLD",
-        "-B" ++ sdl_build_dir,
+        b.fmt("-B{s}", .{sdl_build_dir}),
         sdl_src_dir,
         "-G",
         "Ninja",
     });
 
-    const sdl_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", sdl_build_dir, "--config", "Release", "--", "-j", cpu_count });
+    const sdl_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", sdl_build_dir, "--config", CMAKE_BUILD_TYPE, "--", "-j", cpu_count });
 
     sdl_make_cmd.step.dependOn(&sdl_cmake_cmd.step);
 
     exe.addIncludePath(b.path(sdl_src_dir ++ "/include"));
 
-    exe.addObjectFile(b.path(sdl_build_dir ++ "/libSDL3.a"));
+    exe.addObjectFile(path_join(b, sdl_build_dir, "libSDL3.a"));
 
     return &sdl_make_cmd.step;
 }
@@ -74,7 +84,7 @@ fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.b
 
 fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) *std.Build.Step {
     const dawn_src_dir = "external/dawn";
-    const dawn_build_dir = dawn_src_dir ++ "/out/Release";
+    const dawn_build_dir = join(b, dawn_src_dir ++ "/out", CMAKE_BUILD_TYPE);
 
     const fetch_dawn_deps_cmd = b.addSystemCommand(&.{
         "python3",
@@ -90,13 +100,13 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
         dawn_src_dir,
         "-B",
         dawn_build_dir,
-        "-DCMAKE_BUILD_TYPE=Release",
+        b.fmt("-DCMAKE_BUILD_TYPE={s}", .{CMAKE_BUILD_TYPE}),
         "-DCMAKE_C_COMPILER=clang",
         "-DCMAKE_CXX_COMPILER=clang++",
         "-DCMAKE_LINKER_TYPE=LLD",
         b.fmt("-DCMAKE_C_FLAGS={s}", .{C_FLAGS_STR}),
         b.fmt("-DCMAKE_CXX_FLAGS={s} -stdlib=libc++", .{C_FLAGS_STR}), // apparently needs to explicitly link against clang's libc++ for some reason
-        "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE",
+        b.fmt("-DCMAKE_INTERPROCEDURAL_OPTIMIZATION={s}", .{CMAKE_LTO}),
 
         "-DDAWN_BUILD_SAMPLES=OFF",
         "-DDAWN_BUILD_TESTS=OFF",
@@ -118,7 +128,7 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
         "-DTINT_BUILD_CMD_TOOLS=OFF",
 
         "-DBUILD_SHARED_LIBS=OFF",
-        "-DDAWN_BUILD_MONOLITHIC_LIBRARY=OFF",
+        "-DDAWN_BUILD_MONOLITHIC_LIBRARY=ON",
 
         "-G",
         "Ninja",
@@ -126,15 +136,20 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
 
     dawn_cmake_cmd.step.dependOn(&fetch_dawn_deps_cmd.step);
 
-    const dawn_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", dawn_build_dir, "--config", "Release", "--", "-j", cpu_count });
+    const dawn_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", dawn_build_dir, "--config", CMAKE_BUILD_TYPE, "--", "-j", cpu_count });
     dawn_make_cmd.step.dependOn(&dawn_cmake_cmd.step);
 
     exe.addIncludePath(b.path(dawn_src_dir ++ "/include")); // for webgpu/webgpu.h
-    exe.addIncludePath(b.path(dawn_build_dir ++ "/gen/include")); // for dawn/webgpu.h
+    exe.addIncludePath(path_join(b, dawn_build_dir, "gen/include")); // for dawn/webgpu.h
 
-    exe.addObjectFile(b.path(dawn_build_dir ++ "/src/dawn/libdawn_proc.a"));
+    exe.addObjectFile(path_join(b, dawn_build_dir, "src/dawn/libdawn_proc.a"));
 
-    exe.addObjectFile(b.path(dawn_build_dir ++ "/src/dawn/common/libdawn_common.a"));
+    exe.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/common/libdawn_common.a"));
+
+    exe.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/native/libdawn_native.a"));
+    exe.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/utils/libdawn_wgpu_utils.a"));
+    exe.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/platform/libdawn_platform.a"));
+    exe.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/wire/libdawn_wire.a"));
 
     return &dawn_make_cmd.step;
 }
@@ -301,12 +316,27 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     IS_NATIVE_BUILD = target.query.isNative();
 
+    const optimize = b.standardOptimizeOption(.{});
+
+    var c_flags: [:0]const u8 = undefined;
+    if (optimize == .Debug) {
+        c_flags = C_DEBUG_FLAGS;
+        CMAKE_BUILD_TYPE = "Debug";
+        CMAKE_LTO = "FALSE";
+    } else {
+        c_flags = C_RELEASE_FLAGS;
+        CMAKE_BUILD_TYPE = "Release";
+        CMAKE_LTO = "TRUE";
+    }
+
     // Compile with -march=native when the zig build is also native
     if (IS_NATIVE_BUILD) {
-        C_FLAGS_STR = b.fmt("{s} {s}", .{ C_BASE_FLAGS, C_MARCH_NATIVE });
+        C_FLAGS_STR = b.fmt("{s} {s}", .{ c_flags, C_MARCH_NATIVE });
     } else {
-        C_FLAGS_STR = @constCast(C_BASE_FLAGS);
+        C_FLAGS_STR = @constCast(c_flags);
     }
+
+    std.debug.print("C_FLAGS: {s}\n", .{C_FLAGS_STR});
 
     var parts = std.mem.splitScalar(u8, C_FLAGS_STR, ' ');
     var flags = std.ArrayList([]u8).init(b.allocator);
@@ -316,8 +346,6 @@ pub fn build(b: *std.Build) !void {
     }
 
     C_FLAGS_ARR = try flags.toOwnedSlice();
-
-    const optimize = b.standardOptimizeOption(.{});
 
     // We will also create a module for our other entry point, 'main.zig'.
     const exe_mod = b.createModule(.{
