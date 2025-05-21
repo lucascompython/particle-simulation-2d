@@ -189,11 +189,13 @@ fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin
 
 fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step {
     const dear_bindings_path = "external/dear_bindings";
+    const dear_bindings_script = dear_bindings_path ++ "/dear_bindings.py";
     const venv_path = dear_bindings_path ++ "/.venv";
     const python_path = venv_path ++ "/bin/python3";
     const output_path = dear_bindings_path ++ "/generated";
     const backends_output_path = output_path ++ "/backends";
     const imgui_path = "external/imgui";
+    const imgui_h_path = imgui_path ++ "/imgui.h";
 
     std.fs.cwd().makePath(backends_output_path) catch {
         std.debug.print("Failed to create directory: {s}", .{backends_output_path});
@@ -204,11 +206,11 @@ fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.St
 
     const install_python_deps_cmd = b.addSystemCommand(&.{ python_path, "-m", "pip", "install", "-r", dear_bindings_path ++ "/requirements.txt" });
 
-    const gen_dcimgui_bindings = b.addSystemCommand(&.{ python_path, dear_bindings_path ++ "/dear_bindings.py", "-o", output_path ++ "/dcimgui", imgui_path ++ "/imgui.h" });
+    const gen_dcimgui_bindings = b.addSystemCommand(&.{ python_path, dear_bindings_script, "-o", output_path ++ "/dcimgui", imgui_h_path });
 
-    const gen_sdl3_bindings = b.addSystemCommand(&.{ python_path, dear_bindings_path ++ "/dear_bindings.py", "--backend", "--include", imgui_path ++ "/imgui.h", "--imconfig-path", "external/imgui_config/imgui_config.h", "-o", backends_output_path ++ "/dcimgui_impl_sdl3", imgui_path ++ "/backends/imgui_impl_sdl3.h" });
+    const gen_sdl3_bindings = b.addSystemCommand(&.{ python_path, dear_bindings_script, "--backend", "--include", imgui_h_path, "--imconfig-path", "external/imgui_config/imgui_config.h", "-o", backends_output_path ++ "/dcimgui_impl_sdl3", imgui_path ++ "/backends/imgui_impl_sdl3.h" });
 
-    const gen_wgpu_bindings = b.addSystemCommand(&.{ python_path, dear_bindings_path ++ "/dear_bindings.py", "--backend", "--include", imgui_path ++ "/imgui.h", "--imconfig-path", "external/imgui_config/imgui_config.h", "-o", backends_output_path ++ "/dcimgui_impl_wgpu", imgui_path ++ "/backends/imgui_impl_wgpu.h" });
+    const gen_wgpu_bindings = b.addSystemCommand(&.{ python_path, dear_bindings_script, "--backend", "--include", imgui_h_path, "--imconfig-path", "external/imgui_config/imgui_config.h", "-o", backends_output_path ++ "/dcimgui_impl_wgpu", imgui_path ++ "/backends/imgui_impl_wgpu.h" });
 
     install_python_deps_cmd.step.dependOn(&create_venv_cmd.step);
     gen_dcimgui_bindings.step.dependOn(&install_python_deps_cmd.step);
