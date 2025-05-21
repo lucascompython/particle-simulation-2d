@@ -7,6 +7,11 @@ I'm making this project with the goal of learning modern graphics programming an
 
 A 3D version of this simulation that uses [`Rust`](https://www.rust-lang.org/) + [`Winit`](https://github.com/rust-windowing/winit) + [`Wgpu`](https://github.com/gfx-rs/wgpu) + [`Egui`](https://github.com/emilk/egui), can be found [here](https://github.com/lucascompython/particle-simulation-3d).
 
+## Demo
+https://github.com/user-attachments/assets/5b5efdc1-bf9a-4533-bed4-976d08e197d7
+
+
+
 ## Simulation Methods
 The simulation can run on different methods, such as:
 - CPU - Works everywhere but has limited performance
