@@ -3,7 +3,7 @@
 	url = https://github.com/libsdl-org/SDL.git
 [submodule "external/wgpu-native"]
 	path = external/wgpu-native
-	url = https://github.com/lucascompython/wgpu-native
+	url = https://github.com/gfx-rs/wgpu-native
 [submodule "external/sdl3webgpu"]
 	path = external/sdl3webgpu
 	url = https://github.com/eliemichel/sdl3webgpu

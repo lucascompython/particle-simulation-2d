@@ -1,6 +1,7 @@
 const std = @import("std");
 
 // TODO: Add support for Windows and WebAssembly
+// TODO: See mispter build.zig file
 
 // Flags used for defining C_FLAGS_STR and C_FLAGS_ARR
 const C_RELEASE_FLAGS = "-O3 -ffast-math -flto";
@@ -55,29 +56,33 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) 
 
     sdl_make_cmd.step.dependOn(&sdl_cmake_cmd.step);
 
-    exe.addIncludePath(b.path(sdl_src_dir ++ "/include"));
+    exe.root_module.addIncludePath(b.path(sdl_src_dir ++ "/include"));
 
-    exe.addObjectFile(path_join(b, sdl_build_dir, "libSDL3.a"));
+    // b.addTranslateC(std.Build.Step.TranslateC.Options)
+
+    exe.root_module.addObjectFile(path_join(b, sdl_build_dir, "libSDL3.a"));
 
     return &sdl_make_cmd.step;
 }
 
 fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) *std.Build.Step {
-    const wgpu_native_dir = "external/wgpu-native";
+    const wgpu_native_dir = "external/wgpu-native/Cargo.toml";
 
     var wgpu_native_make_cmd: *std.Build.Step.Run = undefined;
 
-    const rustflags = if (IS_NATIVE_BUILD) "EXTRA_RUSTFLAGS=-Ctarget-cpu=native" else "";
+    // const rustflags = if (IS_NATIVE_BUILD) "EXTRA_RUSTFLAGS=-Ctarget-cpu=native" else "";
 
     if (optimize == .Debug) {
-        wgpu_native_make_cmd = b.addSystemCommand(&.{ "make", "lib-native", "-C", wgpu_native_dir, rustflags });
-        exe.addObjectFile(b.path(wgpu_native_dir ++ "/target/debug/libwgpu_native.a"));
+
+        // TODO: add rustflags for compiling this faster
+        wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "build", "--manifest-path", wgpu_native_dir, "--no-default-features", "--features", "wgsl" });
+        exe.root_module.addObjectFile(b.path(wgpu_native_dir ++ "/target/debug/libwgpu_native.a"));
     } else {
-        wgpu_native_make_cmd = b.addSystemCommand(&.{ "make", "lib-native-release", "-C", wgpu_native_dir, rustflags });
-        exe.addObjectFile(b.path(wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/release/libwgpu_native.a"));
+        wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "build", "--release", "--manifest-path", wgpu_native_dir, "--no-default-features", "--features", "wgsl" });
+        exe.root_module.addObjectFile(b.path(wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/release/libwgpu_native.a"));
     }
 
-    exe.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
+    exe.root_module.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
 
     return &wgpu_native_make_cmd.step;
 }
@@ -139,24 +144,24 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
     const dawn_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", dawn_build_dir, "--config", CMAKE_BUILD_TYPE, "--", "-j", cpu_count });
     dawn_make_cmd.step.dependOn(&dawn_cmake_cmd.step);
 
-    exe.addIncludePath(b.path(dawn_src_dir ++ "/include")); // for webgpu/webgpu.h
-    exe.addIncludePath(path_join(b, dawn_build_dir, "gen/include")); // for dawn/webgpu.h
+    exe.root_module.addIncludePath(b.path(dawn_src_dir ++ "/include")); // for webgpu/webgpu.h
+    exe.root_module.addIncludePath(path_join(b, dawn_build_dir, "gen/include")); // for dawn/webgpu.h
 
-    exe.addObjectFile(path_join(b, dawn_build_dir, "src/dawn/libdawn_proc.a"));
+    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "src/dawn/libdawn_proc.a"));
 
-    exe.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/common/libdawn_common.a"));
+    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/common/libdawn_common.a"));
 
-    exe.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/native/libdawn_native.a"));
-    exe.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/utils/libdawn_wgpu_utils.a"));
-    exe.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/platform/libdawn_platform.a"));
-    exe.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/wire/libdawn_wire.a"));
+    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/native/libdawn_native.a"));
+    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/utils/libdawn_wgpu_utils.a"));
+    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/platform/libdawn_platform.a"));
+    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/wire/libdawn_wire.a"));
 
     return &dawn_make_cmd.step;
 }
 
 fn make_sdl3webgpu(b: *std.Build, exe: *std.Build.Step.Compile) void {
-    exe.addIncludePath(b.path("external/sdl3webgpu"));
-    exe.addCSourceFile(.{ .file = b.path("external/sdl3webgpu/sdl3webgpu.c"), .flags = C_FLAGS_ARR, .language = .c });
+    exe.root_module.addIncludePath(b.path("external/sdl3webgpu"));
+    exe.root_module.addCSourceFile(.{ .file = b.path("external/sdl3webgpu/sdl3webgpu.c"), .flags = C_FLAGS_ARR, .language = .c });
 }
 
 fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
@@ -168,7 +173,7 @@ fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin
         exe.root_module.addCMacro("IMGUI_DISABLE_DEBUG_TOOLS", "");
     }
 
-    exe.addCSourceFiles(.{
+    exe.root_module.addCSourceFiles(.{
         .root = b.path(imgui_path),
         .flags = C_FLAGS_ARR,
         .files = &[_][]const u8{
@@ -183,8 +188,8 @@ fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin
         .language = .cpp,
     });
 
-    exe.addIncludePath(b.path(imgui_path));
-    exe.addIncludePath(b.path(imgui_path ++ "/backends"));
+    exe.root_module.addIncludePath(b.path(imgui_path));
+    exe.root_module.addIncludePath(b.path(imgui_path ++ "/backends"));
 }
 
 fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step {
@@ -197,7 +202,7 @@ fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.St
     const imgui_path = "external/imgui";
     const imgui_h_path = imgui_path ++ "/imgui.h";
 
-    std.fs.cwd().makePath(backends_output_path) catch {
+    std.Io.Dir.cwd().createDirPath(b.graph.io, backends_output_path) catch {
         std.debug.print("Failed to create directory: {s}", .{backends_output_path});
         std.process.exit(1);
     };
@@ -218,16 +223,16 @@ fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.St
     gen_wgpu_bindings.step.dependOn(&gen_sdl3_bindings.step);
     gen_wgpu_bindings.step.dependOn(&gen_dcimgui_bindings.step);
 
-    exe.addIncludePath(b.path(output_path));
-    exe.addIncludePath(b.path(backends_output_path));
-    exe.addIncludePath(b.path("external/imgui_config"));
+    exe.root_module.addIncludePath(b.path(output_path));
+    exe.root_module.addIncludePath(b.path(backends_output_path));
+    exe.root_module.addIncludePath(b.path("external/imgui_config"));
 
     // compile dcimgui.cpp
-    exe.addCSourceFile(.{ .file = b.path(output_path ++ "/dcimgui.cpp"), .flags = C_FLAGS_ARR, .language = .cpp });
+    exe.root_module.addCSourceFile(.{ .file = b.path(output_path ++ "/dcimgui.cpp"), .flags = C_FLAGS_ARR, .language = .cpp });
     // compile dcimgui_impl_sdl3.cpp
-    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_sdl3.cpp"), .flags = C_FLAGS_ARR, .language = .cpp });
+    exe.root_module.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_sdl3.cpp"), .flags = C_FLAGS_ARR, .language = .cpp });
     // compile dcimgui_impl_wgpu.cpp
-    exe.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_wgpu.cpp"), .flags = C_FLAGS_ARR, .language = .cpp });
+    exe.root_module.addCSourceFile(.{ .file = b.path(backends_output_path ++ "/dcimgui_impl_wgpu.cpp"), .flags = C_FLAGS_ARR, .language = .cpp });
 
     return &gen_wgpu_bindings.step;
 }
@@ -237,9 +242,11 @@ const WebGPUBackend = enum {
     @"wgpu-native",
 };
 
+// TODO: make downloading submodules parallel, see if adding something as a step is done in parallel or not
 fn download_submodules(b: *std.Build, cpu_count: []const u8, webgpu_backend: WebGPUBackend) void {
-    var recursive = std.process.Child.init(
-        &.{
+    var recursive = std.process.spawn(
+        b.graph.io,
+        .{ .argv = &.{
             "git",
             "submodule",
             "update",
@@ -251,29 +258,29 @@ fn download_submodules(b: *std.Build, cpu_count: []const u8, webgpu_backend: Web
             "external/SDL3",
             "external/imgui",
             "external/dear_bindings",
-            "external/sdl3webgpu",
-        },
-        b.allocator,
-    );
 
-    _ = recursive.spawnAndWait() catch @panic("Couldn't download git submodules...");
+            "external/sdl3webgpu",
+        } },
+    ) catch @panic("Couldn't spawn git process to download submodules...");
+
+    _ = recursive.wait(b.graph.io) catch @panic("Couldn't download git submodules...");
 
     var webgpu_backend_cmd: std.process.Child = undefined;
     switch (webgpu_backend) {
         .dawn => {
-            webgpu_backend_cmd = std.process.Child.init(
-                &.{ "git", "submodule", "update", "--init", "--recommend-shallow", "-j", cpu_count, "external/dawn" },
-                b.allocator,
-            );
+            webgpu_backend_cmd = std.process.spawn(
+                b.graph.io,
+                .{ .argv = &.{ "git", "submodule", "update", "--init", "--recommend-shallow", "-j", cpu_count, "external/dawn" } },
+            ) catch @panic("Couldn't spawn git process to download submodules...");
         },
         .@"wgpu-native" => {
-            webgpu_backend_cmd = std.process.Child.init(
-                &.{ "git", "submodule", "update", "--init", "--recursive", "--recommend-shallow", "-j", cpu_count, "external/wgpu-native" },
-                b.allocator,
-            );
+            webgpu_backend_cmd = std.process.spawn(
+                b.graph.io,
+                .{ .argv = &.{ "git", "submodule", "update", "--init", "--recursive", "--recommend-shallow", "-j", cpu_count, "external/wgpu-native" } },
+            ) catch @panic("Couldn't spawn git process to download submodules...");
         },
     }
-    _ = webgpu_backend_cmd.spawnAndWait() catch @panic("Couldn't download git submodules...");
+    _ = webgpu_backend_cmd.wait(b.graph.io) catch @panic("Couldn't download git submodules...");
 }
 
 fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
@@ -341,13 +348,13 @@ pub fn build(b: *std.Build) !void {
     std.debug.print("C_FLAGS: {s}\n", .{C_FLAGS_STR});
 
     var parts = std.mem.splitScalar(u8, C_FLAGS_STR, ' ');
-    var flags = std.ArrayList([]u8).init(b.allocator);
+    var flags: std.ArrayList([]u8) = .empty;
 
     while (parts.next()) |part| {
-        try flags.append(@constCast(part));
+        try flags.append(b.allocator, @constCast(part));
     }
 
-    C_FLAGS_ARR = try flags.toOwnedSlice();
+    C_FLAGS_ARR = try flags.toOwnedSlice(b.allocator);
 
     // We will also create a module for our other entry point, 'main.zig'.
     const exe_mod = b.createModule(.{
@@ -367,9 +374,10 @@ pub fn build(b: *std.Build) !void {
         .root_module = exe_mod,
     });
 
-    exe.want_lto = optimize != .Debug;
+    exe.lto = if (optimize != .Debug) .full else .none;
 
-    exe.linkLibCpp(); // links by default to clang's libc++
+    // TODO: This no longer exists in zig 0.16
+    // exe.linkLibCpp(); // links by default to clang's libc++
 
     make_deps(b, exe, optimize);
 
