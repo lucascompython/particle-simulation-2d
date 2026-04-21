@@ -1,7 +1,6 @@
 const std = @import("std");
 
 // TODO: Add support for Windows and WebAssembly
-// TODO: See mispter build.zig file
 
 // Flags used for defining C_FLAGS_STR and C_FLAGS_ARR
 const C_RELEASE_FLAGS = "-O3 -ffast-math -flto";
@@ -58,27 +57,28 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) 
 
     exe.root_module.addIncludePath(b.path(sdl_src_dir ++ "/include"));
 
-    // b.addTranslateC(std.Build.Step.TranslateC.Options)
-
     exe.root_module.addObjectFile(path_join(b, sdl_build_dir, "libSDL3.a"));
 
     return &sdl_make_cmd.step;
 }
 
 fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) *std.Build.Step {
-    const wgpu_native_dir = "external/wgpu-native/Cargo.toml";
+    const wgpu_native_dir = "external/wgpu-native/";
+    const wgpu_native_cargo_toml = join(b, wgpu_native_dir, "Cargo.toml");
 
     var wgpu_native_make_cmd: *std.Build.Step.Run = undefined;
 
-    // const rustflags = if (IS_NATIVE_BUILD) "EXTRA_RUSTFLAGS=-Ctarget-cpu=native" else "";
+    const rustflags: []const u8 = if (IS_NATIVE_BUILD) "-Ctarget-cpu=native" else "";
 
+    // TODO: add rustflags for compiling this faster or optimizing
     if (optimize == .Debug) {
-
-        // TODO: add rustflags for compiling this faster
-        wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "build", "--manifest-path", wgpu_native_dir, "--no-default-features", "--features", "wgsl" });
+        wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "build", "--manifest-path", wgpu_native_cargo_toml, "--no-default-features", "--features", "wgsl" });
+        wgpu_native_make_cmd.setEnvironmentVariable("RUSTFLAGS", rustflags);
         exe.root_module.addObjectFile(b.path(wgpu_native_dir ++ "/target/debug/libwgpu_native.a"));
     } else {
-        wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "build", "--release", "--manifest-path", wgpu_native_dir, "--no-default-features", "--features", "wgsl" });
+        wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "build", "--release", "--manifest-path", wgpu_native_cargo_toml, "--no-default-features", "--features", "wgsl" });
+
+        wgpu_native_make_cmd.setEnvironmentVariable("RUSTFLAGS", rustflags);
         exe.root_module.addObjectFile(b.path(wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/release/libwgpu_native.a"));
     }
 
@@ -265,24 +265,33 @@ fn download_submodules(b: *std.Build, cpu_count: []const u8, webgpu_backend: Web
 
     _ = recursive.wait(b.graph.io) catch @panic("Couldn't download git submodules...");
 
-    var webgpu_backend_cmd: std.process.Child = undefined;
     switch (webgpu_backend) {
         .dawn => {
-            webgpu_backend_cmd = std.process.spawn(
+            var webgpu_backend_cmd = std.process.spawn(
                 b.graph.io,
                 .{ .argv = &.{ "git", "submodule", "update", "--init", "--recommend-shallow", "-j", cpu_count, "external/dawn" } },
             ) catch @panic("Couldn't spawn git process to download submodules...");
+
+            _ = webgpu_backend_cmd.wait(b.graph.io) catch @panic("Couldn't download git submodules...");
         },
         .@"wgpu-native" => {
-            webgpu_backend_cmd = std.process.spawn(
+            var webgpu_backend_cmd = std.process.spawn(
                 b.graph.io,
-                .{ .argv = &.{ "git", "submodule", "update", "--init", "--recursive", "--recommend-shallow", "-j", cpu_count, "external/wgpu-native" } },
+                .{ .argv = &.{ "git", "submodule", "update", "--init", "--recommend-shallow", "-j", cpu_count, "external/wgpu-native" } },
             ) catch @panic("Couldn't spawn git process to download submodules...");
+            _ = webgpu_backend_cmd.wait(b.graph.io) catch @panic("Couldn't download git submodules...");
+
+            const wgpu_native_dir: std.process.Child.Cwd = .{ .path = "external/wgpu-native" };
+            var wgpu_native_webgpu_headers_cmd = std.process.spawn(
+                b.graph.io,
+                .{ .argv = &.{ "git", "submodule", "update", "--init", "--recommend-shallow", "-j", cpu_count, "ffi/webgpu-headers" }, .cwd = wgpu_native_dir },
+            ) catch @panic("Couldn't spawn git process to download submodules...");
+            _ = wgpu_native_webgpu_headers_cmd.wait(b.graph.io) catch @panic("Couldn't download git submodules...");
         },
     }
-    _ = webgpu_backend_cmd.wait(b.graph.io) catch @panic("Couldn't download git submodules...");
 }
 
+// TODO: make this function more efficient by not running commands every time, and by doing things in parallel
 fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
     const cpu_count: usize = std.Thread.getCpuCount() catch 1;
 
@@ -367,6 +376,8 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .strip = optimize != .Debug,
         .unwind_tables = .none,
+        .link_libc = true,
+        //.link_libcpp = true,
     });
 
     const exe = b.addExecutable(.{
@@ -375,9 +386,6 @@ pub fn build(b: *std.Build) !void {
     });
 
     exe.lto = if (optimize != .Debug) .full else .none;
-
-    // TODO: This no longer exists in zig 0.16
-    // exe.linkLibCpp(); // links by default to clang's libc++
 
     make_deps(b, exe, optimize);
 
