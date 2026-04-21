@@ -69,21 +69,27 @@ fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *s
 
     var wgpu_native_make_cmd: *std.Build.Step.Run = undefined;
 
-    const rustflags: []const u8 = if (IS_NATIVE_BUILD) "-Ctarget-cpu=native" else "";
+    var rustflags: []const u8 = "-Zunstable-options -Cpanic=immediate-abort";
+    if (IS_NATIVE_BUILD) {
+        rustflags = b.fmt("{s} -Ctarget-cpu=native", .{rustflags});
+    }
 
     // TODO: add rustflags for compiling this faster or optimizing
     if (optimize == .Debug) {
-        wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "build", "--manifest-path", wgpu_native_cargo_toml, "--no-default-features", "--features", "wgsl" });
+        wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "+nightly", "build", "--manifest-path", wgpu_native_cargo_toml, "--no-default-features", "--features=wgsl,vulkan", "-Zbuild-std=std,core,panic_abort", "-Zbuild-std-features=", "--target", "x86_64-unknown-linux-gnu" });
         wgpu_native_make_cmd.setEnvironmentVariable("RUSTFLAGS", rustflags);
+        wgpu_native_make_cmd.setEnvironmentVariable("CARGO_PROFILE_DEBUG_PANIC", "abort");
         exe.root_module.addObjectFile(b.path(wgpu_native_dir ++ "/target/debug/libwgpu_native.a"));
     } else {
-        wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "build", "--release", "--manifest-path", wgpu_native_cargo_toml, "--no-default-features", "--features", "wgsl" });
+        rustflags = b.fmt("{s} -Zlocation-detail=none -Zfmt-debug=none", .{rustflags});
+
+        wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "+nightly", "build", "--release", "--manifest-path", wgpu_native_cargo_toml, "--no-default-features", "--features=wgsl,vulkan" });
 
         wgpu_native_make_cmd.setEnvironmentVariable("RUSTFLAGS", rustflags);
         exe.root_module.addObjectFile(b.path(wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/release/libwgpu_native.a"));
     }
 
-    // exe.root_module.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
+    exe.root_module.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
     translate_c.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
 
     return &wgpu_native_make_cmd.step;
@@ -146,8 +152,8 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Buil
     const dawn_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", dawn_build_dir, "--config", CMAKE_BUILD_TYPE, "--", "-j", cpu_count });
     dawn_make_cmd.step.dependOn(&dawn_cmake_cmd.step);
 
-    // exe.root_module.addIncludePath(b.path(dawn_src_dir ++ "/include")); // for webgpu/webgpu.h
-    // exe.root_module.addIncludePath(path_join(b, dawn_build_dir, "gen/include")); // for dawn/webgpu.h
+    exe.root_module.addIncludePath(b.path(dawn_src_dir ++ "/include")); // for webgpu/webgpu.h
+    exe.root_module.addIncludePath(path_join(b, dawn_build_dir, "gen/include")); // for dawn/webgpu.h
     translate_c.addIncludePath(b.path(dawn_src_dir ++ "/include"));
     translate_c.addIncludePath(path_join(b, dawn_build_dir, "gen/include"));
 
@@ -164,8 +170,9 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Buil
 }
 
 fn make_sdl3webgpu(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build.Step.TranslateC) void {
-    // exe.root_module.addIncludePath(b.path("external/sdl3webgpu"));
+    exe.root_module.addIncludePath(b.path("external/sdl3webgpu"));
     translate_c.addIncludePath(b.path("external/sdl3webgpu"));
+    exe.installHeadersDirectory(b.path("external/sdl3webgpu"), "sdl3webgpu", .{ .include_extensions = &.{"h"} });
     exe.root_module.addCSourceFile(.{ .file = b.path("external/sdl3webgpu/sdl3webgpu.c"), .flags = C_FLAGS_ARR, .language = .c });
 }
 
@@ -194,8 +201,8 @@ fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Bui
         .language = .cpp,
     });
 
-    // exe.root_module.addIncludePath(b.path(imgui_path));
-    // exe.root_module.addIncludePath(b.path(imgui_path ++ "/backends"));
+    exe.root_module.addIncludePath(b.path(imgui_path));
+    exe.root_module.addIncludePath(b.path(imgui_path ++ "/backends"));
     translate_c.addIncludePath(b.path(imgui_path));
     translate_c.addIncludePath(b.path(imgui_path ++ "/backends"));
 }
@@ -231,9 +238,9 @@ fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: 
     gen_wgpu_bindings.step.dependOn(&gen_sdl3_bindings.step);
     gen_wgpu_bindings.step.dependOn(&gen_dcimgui_bindings.step);
 
-    // exe.root_module.addIncludePath(b.path(output_path));
-    // exe.root_module.addIncludePath(b.path(backends_output_path));
-    // exe.root_module.addIncludePath(b.path("external/imgui_config"));
+    exe.root_module.addIncludePath(b.path(output_path));
+    exe.root_module.addIncludePath(b.path(backends_output_path));
+    exe.root_module.addIncludePath(b.path("external/imgui_config"));
 
     translate_c.addIncludePath(b.path(output_path));
     translate_c.addIncludePath(b.path(backends_output_path));
@@ -321,9 +328,9 @@ fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Buil
     make_deps_step.dependOn(sdl_make_step);
 
     make_imgui(b, exe, translate_c, optimize);
-    make_sdl3webgpu(b, exe);
+    make_sdl3webgpu(b, exe, translate_c);
 
-    const make_dear_bindings_step = make_dear_bindings(b, exe);
+    const make_dear_bindings_step = make_dear_bindings(b, exe, translate_c);
     make_deps_step.dependOn(make_dear_bindings_step);
 
     switch (webgpu_backend) {
@@ -377,7 +384,7 @@ pub fn build(b: *std.Build) !void {
 
     C_FLAGS_ARR = try flags.toOwnedSlice(b.allocator);
 
-    const translate_c = b.addTranslateC(.{ .root_source_file = b.path("src/c.h"), .target = target, .optimize = optimize, .link_libc = false });
+    const translate_c = b.addTranslateC(.{ .root_source_file = b.path("src/c.h"), .target = target, .optimize = optimize, .link_libc = true });
     // We will also create a module for our other entry point, 'main.zig'.
     const exe_mod = b.createModule(.{
         // `root_source_file` is the Zig "entry point" of the module. If a module
@@ -388,13 +395,13 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
         .strip = optimize != .Debug,
-        .unwind_tables = .none,
+        // .unwind_tables = .none,
         // .imports = &.{.{
         //     .name = "c",
         //     .module = translate_c.createModule(),
         // }},
-        // .link_libc = true,
-        //.link_libcpp = true,
+        .link_libc = true,
+        .link_libcpp = true,
     });
 
     const exe = b.addExecutable(.{
@@ -405,6 +412,7 @@ pub fn build(b: *std.Build) !void {
     exe.lto = if (optimize != .Debug) .full else .none;
 
     make_deps(b, exe, translate_c, optimize);
+    exe.root_module.addImport("c", translate_c.createModule());
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

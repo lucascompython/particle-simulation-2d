@@ -1,7 +1,7 @@
-#include "SDL3/SDL.h";
-#include "dcimgui.h";
-#include "dcimgui_impl_sdl3.h";
-#include "dcimgui_impl_wgpu.h";
-#include "imgui_config.h";
-#include "sdl3webgpu.h";
-#include "webgpu/webgpu.h";
+#include "SDL3/SDL.h"
+#include "dcimgui.h"
+#include "dcimgui_impl_sdl3.h"
+#include "dcimgui_impl_wgpu.h"
+#include "imgui_config.h"
+#include "sdl3webgpu.h"
+#include "webgpu/webgpu.h"
