@@ -38,6 +38,7 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build
         "-DSDL_RENDER=OFF",
         "-DSDL_POWER=OFF",
         "-DSDL_HIDAPI=OFF",
+        "-DSDL_TRAY=OFF",
         b.fmt("-DCMAKE_BUILD_TYPE={s}", .{CMAKE_BUILD_TYPE}),
         b.fmt("-DCMAKE_INTERPROCEDURAL_OPTIMIZATION={s}", .{CMAKE_LTO}),
         b.fmt("-DCMAKE_C_FLAGS={s}", .{C_FLAGS_STR}),
@@ -123,6 +124,7 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Buil
 
         "-DDAWN_BUILD_SAMPLES=OFF",
         "-DDAWN_BUILD_TESTS=OFF",
+        "-DDAWN_BUILD_PROTOBUF=OFF",
         "-DDAWN_ENABLE_DESKTOP_GL=OFF",
         "-DDAWN_ENABLE_OPENGLES=OFF", // May need to change this for WebGL
         "-DDAWN_ENABLE_NULL=OFF",
@@ -137,11 +139,12 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Buil
         "-DTINT_BUILD_MSL_WRITER=OFF",
         "-DTINT_BUILD_SPV_WRITER=OFF",
         "-DTINT_BUILD_WGSL_WRITER=OFF",
+        "-DTINT_BUILD_IR_BINARY=OFF",
         "-DTINT_BUILD_TESTS=OFF",
         "-DTINT_BUILD_CMD_TOOLS=OFF",
 
         "-DBUILD_SHARED_LIBS=OFF",
-        "-DDAWN_BUILD_MONOLITHIC_LIBRARY=ON",
+        "-DDAWN_BUILD_MONOLITHIC_LIBRARY=STATIC",
 
         "-G",
         "Ninja",
