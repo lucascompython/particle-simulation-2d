@@ -22,7 +22,7 @@ inline fn path_join(b: *std.Build, str_a: []const u8, str_b: []const u8) std.Bui
     return b.path(join(b, str_a, str_b));
 }
 
-fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) *std.Build.Step {
+fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build.Step.TranslateC, cpu_count: []const u8) *std.Build.Step {
     const sdl_src_dir = "external/SDL3";
     const sdl_build_dir = join(b, sdl_src_dir ++ "/build", CMAKE_BUILD_TYPE);
 
@@ -55,16 +55,17 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) 
 
     sdl_make_cmd.step.dependOn(&sdl_cmake_cmd.step);
 
-    exe.root_module.addIncludePath(b.path(sdl_src_dir ++ "/include"));
+    // exe.root_module.addIncludePath(b.path(sdl_src_dir ++ "/include"));
 
+    translate_c.addIncludePath(b.path(sdl_src_dir ++ "/include"));
     exe.root_module.addObjectFile(path_join(b, sdl_build_dir, "libSDL3.a"));
 
     return &sdl_make_cmd.step;
 }
 
-fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) *std.Build.Step {
+fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build.Step.TranslateC, optimize: std.builtin.OptimizeMode) *std.Build.Step {
     const wgpu_native_dir = "external/wgpu-native/";
-    const wgpu_native_cargo_toml = join(b, wgpu_native_dir, "Cargo.toml");
+    const wgpu_native_cargo_toml = wgpu_native_dir ++ "Cargo.toml";
 
     var wgpu_native_make_cmd: *std.Build.Step.Run = undefined;
 
@@ -82,12 +83,13 @@ fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.b
         exe.root_module.addObjectFile(b.path(wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/release/libwgpu_native.a"));
     }
 
-    exe.root_module.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
+    // exe.root_module.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
+    translate_c.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
 
     return &wgpu_native_make_cmd.step;
 }
 
-fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8) *std.Build.Step {
+fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build.Step.TranslateC, cpu_count: []const u8) *std.Build.Step {
     const dawn_src_dir = "external/dawn";
     const dawn_build_dir = join(b, dawn_src_dir ++ "/out", CMAKE_BUILD_TYPE);
 
@@ -144,8 +146,10 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
     const dawn_make_cmd = b.addSystemCommand(&.{ "cmake", "--build", dawn_build_dir, "--config", CMAKE_BUILD_TYPE, "--", "-j", cpu_count });
     dawn_make_cmd.step.dependOn(&dawn_cmake_cmd.step);
 
-    exe.root_module.addIncludePath(b.path(dawn_src_dir ++ "/include")); // for webgpu/webgpu.h
-    exe.root_module.addIncludePath(path_join(b, dawn_build_dir, "gen/include")); // for dawn/webgpu.h
+    // exe.root_module.addIncludePath(b.path(dawn_src_dir ++ "/include")); // for webgpu/webgpu.h
+    // exe.root_module.addIncludePath(path_join(b, dawn_build_dir, "gen/include")); // for dawn/webgpu.h
+    translate_c.addIncludePath(b.path(dawn_src_dir ++ "/include"));
+    translate_c.addIncludePath(path_join(b, dawn_build_dir, "gen/include"));
 
     exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "src/dawn/libdawn_proc.a"));
 
@@ -159,14 +163,16 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, cpu_count: []const u8)
     return &dawn_make_cmd.step;
 }
 
-fn make_sdl3webgpu(b: *std.Build, exe: *std.Build.Step.Compile) void {
-    exe.root_module.addIncludePath(b.path("external/sdl3webgpu"));
+fn make_sdl3webgpu(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build.Step.TranslateC) void {
+    // exe.root_module.addIncludePath(b.path("external/sdl3webgpu"));
+    translate_c.addIncludePath(b.path("external/sdl3webgpu"));
     exe.root_module.addCSourceFile(.{ .file = b.path("external/sdl3webgpu/sdl3webgpu.c"), .flags = C_FLAGS_ARR, .language = .c });
 }
 
-fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
+fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build.Step.TranslateC, optimize: std.builtin.OptimizeMode) void {
     const imgui_path = "external/imgui";
 
+    // TODO: check if this is the right file
     exe.root_module.addCMacro("IMGUI_USER_CONFIG", "\"imgui_config.h\"");
 
     if (optimize != .Debug) {
@@ -188,11 +194,13 @@ fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin
         .language = .cpp,
     });
 
-    exe.root_module.addIncludePath(b.path(imgui_path));
-    exe.root_module.addIncludePath(b.path(imgui_path ++ "/backends"));
+    // exe.root_module.addIncludePath(b.path(imgui_path));
+    // exe.root_module.addIncludePath(b.path(imgui_path ++ "/backends"));
+    translate_c.addIncludePath(b.path(imgui_path));
+    translate_c.addIncludePath(b.path(imgui_path ++ "/backends"));
 }
 
-fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step {
+fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build.Step.TranslateC) *std.Build.Step {
     const dear_bindings_path = "external/dear_bindings";
     const dear_bindings_script = dear_bindings_path ++ "/dear_bindings.py";
     const venv_path = dear_bindings_path ++ "/.venv";
@@ -223,9 +231,13 @@ fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.St
     gen_wgpu_bindings.step.dependOn(&gen_sdl3_bindings.step);
     gen_wgpu_bindings.step.dependOn(&gen_dcimgui_bindings.step);
 
-    exe.root_module.addIncludePath(b.path(output_path));
-    exe.root_module.addIncludePath(b.path(backends_output_path));
-    exe.root_module.addIncludePath(b.path("external/imgui_config"));
+    // exe.root_module.addIncludePath(b.path(output_path));
+    // exe.root_module.addIncludePath(b.path(backends_output_path));
+    // exe.root_module.addIncludePath(b.path("external/imgui_config"));
+
+    translate_c.addIncludePath(b.path(output_path));
+    translate_c.addIncludePath(b.path(backends_output_path));
+    translate_c.addIncludePath(b.path("external/imgui_config"));
 
     // compile dcimgui.cpp
     exe.root_module.addCSourceFile(.{ .file = b.path(output_path ++ "/dcimgui.cpp"), .flags = C_FLAGS_ARR, .language = .cpp });
@@ -292,7 +304,7 @@ fn download_submodules(b: *std.Build, cpu_count: []const u8, webgpu_backend: Web
 }
 
 // TODO: make this function more efficient by not running commands every time, and by doing things in parallel
-fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.OptimizeMode) void {
+fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build.Step.TranslateC, optimize: std.builtin.OptimizeMode) void {
     const cpu_count: usize = std.Thread.getCpuCount() catch 1;
 
     var buf: [2]u8 = undefined;
@@ -305,10 +317,10 @@ fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.
     const make_deps_step = b.step("make-deps", "Make dependencies (SDL3, ImGui, Dawn, Wgpu-Native)");
     download_submodules(b, cpu_count_str, webgpu_backend);
 
-    const sdl_make_step = make_sdl(b, exe, cpu_count_str);
+    const sdl_make_step = make_sdl(b, exe, translate_c, cpu_count_str);
     make_deps_step.dependOn(sdl_make_step);
 
-    make_imgui(b, exe, optimize);
+    make_imgui(b, exe, translate_c, optimize);
     make_sdl3webgpu(b, exe);
 
     const make_dear_bindings_step = make_dear_bindings(b, exe);
@@ -316,13 +328,13 @@ fn make_deps(b: *std.Build, exe: *std.Build.Step.Compile, optimize: std.builtin.
 
     switch (webgpu_backend) {
         .@"wgpu-native" => {
-            const wgpu_native_make_step = make_wgpu_native(b, exe, optimize);
+            const wgpu_native_make_step = make_wgpu_native(b, exe, translate_c, optimize);
             make_deps_step.dependOn(wgpu_native_make_step);
 
             exe.root_module.addCMacro("IMGUI_IMPL_WEBGPU_BACKEND_WGPU", "");
         },
         .dawn => {
-            const dawn_make_step = make_dawn(b, exe, cpu_count_str);
+            const dawn_make_step = make_dawn(b, exe, translate_c, cpu_count_str);
             make_deps_step.dependOn(dawn_make_step);
 
             exe.root_module.addCMacro("IMGUI_IMPL_WEBGPU_BACKEND_DAWN", "");
@@ -365,6 +377,7 @@ pub fn build(b: *std.Build) !void {
 
     C_FLAGS_ARR = try flags.toOwnedSlice(b.allocator);
 
+    const translate_c = b.addTranslateC(.{ .root_source_file = b.path("src/c.h"), .target = target, .optimize = optimize, .link_libc = false });
     // We will also create a module for our other entry point, 'main.zig'.
     const exe_mod = b.createModule(.{
         // `root_source_file` is the Zig "entry point" of the module. If a module
@@ -376,7 +389,11 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .strip = optimize != .Debug,
         .unwind_tables = .none,
-        .link_libc = true,
+        // .imports = &.{.{
+        //     .name = "c",
+        //     .module = translate_c.createModule(),
+        // }},
+        // .link_libc = true,
         //.link_libcpp = true,
     });
 
@@ -387,7 +404,7 @@ pub fn build(b: *std.Build) !void {
 
     exe.lto = if (optimize != .Debug) .full else .none;
 
-    make_deps(b, exe, optimize);
+    make_deps(b, exe, translate_c, optimize);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
