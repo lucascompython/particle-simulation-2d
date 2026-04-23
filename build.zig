@@ -14,6 +14,8 @@ var C_FLAGS_ARR: []const []const u8 = undefined;
 
 var IS_NATIVE_BUILD: bool = undefined;
 
+var cwd = std.Io.Dir.cwd();
+
 inline fn join(b: *std.Build, str_a: []const u8, str_b: []const u8) []u8 {
     return b.pathJoin(&[_][]const u8{ str_a, str_b });
 }
@@ -65,8 +67,8 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build
 }
 
 fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build.Step.TranslateC, optimize: std.builtin.OptimizeMode) *std.Build.Step {
-    const wgpu_native_dir = "external/wgpu-native/";
-    const wgpu_native_cargo_toml = wgpu_native_dir ++ "Cargo.toml";
+    const wgpu_native_dir = "external/wgpu-native";
+    const wgpu_native_cargo_toml = wgpu_native_dir ++ "/Cargo.toml";
 
     var wgpu_native_make_cmd: *std.Build.Step.Run = undefined;
 
@@ -89,6 +91,28 @@ fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *s
         wgpu_native_make_cmd.setEnvironmentVariable("RUSTFLAGS", rustflags);
         exe.root_module.addObjectFile(b.path(wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/release/libwgpu_native.a"));
     }
+
+    const ffi_dir = wgpu_native_dir ++ "/ffi";
+    const webgpu_headers_dir = ffi_dir ++ "/webgpu";
+
+    cwd.createDir(b.graph.io, webgpu_headers_dir, .default_dir) catch |err| {
+        switch (err) {
+            std.Io.Dir.CreateDirError.PathAlreadyExists => {},
+            else => {
+                std.debug.print("Error creating directory: {s}\n", .{webgpu_headers_dir});
+                std.process.exit(1);
+            },
+        }
+    };
+
+    cwd.copyFile(ffi_dir ++ "/wgpu.h", cwd, webgpu_headers_dir ++ "/wgpu.h", b.graph.io, .{ .make_path = false, .permissions = .default_file, .replace = true }) catch {
+        std.debug.print("Error copying wgpu.h file\n", .{});
+        std.process.exit(1);
+    };
+    cwd.copyFile(ffi_dir ++ "/webgpu-headers/webgpu.h", cwd, webgpu_headers_dir ++ "/webgpu.h", b.graph.io, .{ .make_path = false, .permissions = .default_file, .replace = true }) catch {
+        std.debug.print("Error copying webgpu.h file\n", .{});
+        std.process.exit(1);
+    };
 
     exe.root_module.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
     translate_c.addIncludePath(b.path(wgpu_native_dir ++ "/ffi"));
@@ -216,9 +240,15 @@ fn make_dear_bindings(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: 
     const imgui_path = "external/imgui";
     const imgui_h_path = imgui_path ++ "/imgui.h";
 
-    std.Io.Dir.cwd().createDirPath(b.graph.io, backends_output_path) catch {
-        std.debug.print("Failed to create directory: {s}", .{backends_output_path});
-        std.process.exit(1);
+    cwd.createDir(b.graph.io, backends_output_path, .default_dir) catch |err| {
+        switch (err) {
+            // TODO: make it so if it's already done, don't do it again
+            std.Io.Dir.CreateDirError.PathAlreadyExists => {},
+            else => {
+                std.debug.print("Error creating directory: {s}\n", .{backends_output_path});
+                std.process.exit(1);
+            },
+        }
     };
 
     const create_venv_cmd = b.addSystemCommand(&.{ "python3", "-m", "venv", venv_path });
