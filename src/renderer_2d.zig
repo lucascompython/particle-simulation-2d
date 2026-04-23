@@ -192,6 +192,7 @@ pub const ParticleRenderer = struct {
             .loadOp = c.WGPULoadOp_Clear,
             .storeOp = c.WGPUStoreOp_Store,
             .clearValue = c.WGPUColor{ .r = 0.01, .g = 0.01, .b = 0.01, .a = 1.0 },
+            .depthSlice = c.WGPU_DEPTH_SLICE_UNDEFINED,
         };
         const render_pass_label_str = "Particle Render Pass";
         const render_pass_desc = c.WGPURenderPassDescriptor{

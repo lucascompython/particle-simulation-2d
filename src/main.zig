@@ -166,9 +166,12 @@ fn request_device_callback(status: c.WGPURequestDeviceStatus, device: c.WGPUDevi
     }
 }
 
-fn uncaptured_error_callback(@"type": c.WGPUErrorType, message: [*:0]const u8, userdata: ?*anyopaque) callconv(.C) void {
-    _ = userdata;
-    std.log.err("WGPU Uncaptured Error ({any}): {s}", .{ @"type", message });
+fn uncaptured_error_callback(device: [*c]const c.WGPUDevice, @"type": c.WGPUErrorType, message_view: c.WGPUStringView, userdata1: ?*anyopaque, userdata2: ?*anyopaque) callconv(.c) void {
+    _ = device;
+    _ = userdata1;
+    _ = userdata2;
+    const message_slice = if (message_view.data) |ptr| std.mem.span(ptr)[0..message_view.length] else "Unknown error";
+    std.log.err("WGPU Uncaptured Error ({any}): {s}", .{ @"type", message_slice });
 }
 
 fn setup_wgpu(window: *c.SDL_Window, io: std.Io) !void {
@@ -211,6 +214,11 @@ fn setup_wgpu(window: *c.SDL_Window, io: std.Io) !void {
         // .requiredFeaturesCount is no longer a field in this webgpu.h version
         .requiredFeatures = null, // Assuming null means no *additional* features beyond defaults
         .defaultQueue = .{ .label = .{ .data = queue_label_str.ptr, .length = queue_label_str.len } },
+        .uncapturedErrorCallbackInfo = .{
+            .callback = uncaptured_error_callback,
+            .userdata1 = null,
+            .userdata2 = null,
+        },
     };
     const device_callback_info = c.WGPURequestDeviceCallbackInfo{
         .mode = c.WGPUCallbackMode_AllowSpontaneous, // Or .ProcessEvents
@@ -227,8 +235,6 @@ fn setup_wgpu(window: *c.SDL_Window, io: std.Io) !void {
         try io.sleep(std.Io.Duration{ .nanoseconds = 100 * std.time.ns_per_ms }, .real);
         if (wgpu_device == null) @panic("Device not set after callback");
     }
-
-    // _ = c.wgpuDeviceSetUncapturedErrorCallback(wgpu_device.?, uncaptured_error_callback, null); // Already removed
 
     var capabilities: c.WGPUSurfaceCapabilities = undefined;
     _ = c.wgpuSurfaceGetCapabilities(wgpu_surface.?, wgpu_adapter.?, &capabilities);
@@ -545,6 +551,7 @@ pub fn main() !void {
             .loadOp = c.WGPULoadOp_Load, // Load previous contents (particles)
             .storeOp = c.WGPUStoreOp_Store,
             .clearValue = c.WGPUColor{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0 }, // Clear color not strictly needed due to LoadOp
+            .depthSlice = c.WGPU_DEPTH_SLICE_UNDEFINED,
         };
         const imgui_render_pass_label_str = "ImGui Render Pass";
         const imgui_render_pass_desc = c.WGPURenderPassDescriptor{

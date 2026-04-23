@@ -80,7 +80,7 @@ fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *s
         wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "+nightly", "build", "--manifest-path", wgpu_native_cargo_toml, "--no-default-features", "--features=wgsl,vulkan", "-Zbuild-std=std,core,panic_abort", "-Zbuild-std-features=", "--target", "x86_64-unknown-linux-gnu" });
         wgpu_native_make_cmd.setEnvironmentVariable("RUSTFLAGS", rustflags);
         wgpu_native_make_cmd.setEnvironmentVariable("CARGO_PROFILE_DEBUG_PANIC", "abort");
-        exe.root_module.addObjectFile(b.path(wgpu_native_dir ++ "/target/debug/libwgpu_native.a"));
+        exe.root_module.addObjectFile(b.path(wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/debug/libwgpu_native.a"));
     } else {
         rustflags = b.fmt("{s} -Zlocation-detail=none -Zfmt-debug=none", .{rustflags});
 
@@ -137,7 +137,7 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Buil
         "-DTINT_BUILD_GLSL_VALIDATOR=OFF",
         "-DTINT_BUILD_HLSL_WRITER=OFF",
         "-DTINT_BUILD_MSL_WRITER=OFF",
-        "-DTINT_BUILD_SPV_WRITER=OFF",
+        "-DTINT_BUILD_SPV_WRITER=ON",
         "-DTINT_BUILD_WGSL_WRITER=OFF",
         "-DTINT_BUILD_IR_BINARY=OFF",
         "-DTINT_BUILD_TESTS=OFF",
@@ -160,14 +160,10 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Buil
     translate_c.addIncludePath(b.path(dawn_src_dir ++ "/include"));
     translate_c.addIncludePath(path_join(b, dawn_build_dir, "gen/include"));
 
-    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "src/dawn/libdawn_proc.a"));
+    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/native/libwebgpu_dawn.a"));
 
-    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/common/libdawn_common.a"));
-
-    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/native/libdawn_native.a"));
-    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/utils/libdawn_wgpu_utils.a"));
-    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/platform/libdawn_platform.a"));
-    exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/wire/libdawn_wire.a"));
+    // TODO: see why we need to manually link against libc++ again
+    exe.root_module.addObjectFile(.{ .cwd_relative = "/usr/lib/libc++.a" });
 
     return &dawn_make_cmd.step;
 }
@@ -388,21 +384,12 @@ pub fn build(b: *std.Build) !void {
     C_FLAGS_ARR = try flags.toOwnedSlice(b.allocator);
 
     const translate_c = b.addTranslateC(.{ .root_source_file = b.path("src/c.h"), .target = target, .optimize = optimize, .link_libc = true });
-    // We will also create a module for our other entry point, 'main.zig'.
     const exe_mod = b.createModule(.{
-        // `root_source_file` is the Zig "entry point" of the module. If a module
-        // only contains e.g. external object files, you can make this `null`.
-        // In this case the main source file is merely a path, however, in more
-        // complicated build scripts, this could be a generated file.
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
         .strip = optimize != .Debug,
         // .unwind_tables = .none,
-        // .imports = &.{.{
-        //     .name = "c",
-        //     .module = translate_c.createModule(),
-        // }},
         .link_libc = true,
         .link_libcpp = true,
     });
