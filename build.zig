@@ -33,6 +33,7 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build
         "-DCMAKE_C_COMPILER=clang",
         "-DCMAKE_CXX_COMPILER=clang++",
 
+        "-DSDL_NOTIFICATION=OFF",
         "-DSDL_DBUS=OFF",
         "-DSDL_DUMMYVIDEO=OFF",
         "-DSDL_FRIBIDI=OFF",
