@@ -30,6 +30,26 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build
 
     const sdl_cmake_cmd = b.addSystemCommand(&.{
         "cmake",
+        "-DCMAKE_C_COMPILER=clang",
+        "-DCMAKE_CXX_COMPILER=clang++",
+
+        "-DSDL_DBUS=OFF",
+        "-DSDL_DUMMYVIDEO=OFF",
+        "-DSDL_FRIBIDI=OFF",
+        "-DSDL_KMSDRM=OFF",
+        "-DSDL_LIBURING=OFF",
+        "-DSDL_LIBTHAI=OFF",
+        "-DSDL_OFFSCREEN=OFF",
+        "-DSDL_OPENGL=OFF",
+        "-DSDL_OPENGLES=OFF",
+        "-DSDL_VULKAN=OFF",
+        "-DSDL_UNINSTALL=OFF",
+        "-DSDL_SYSTEM_ICONV=OFF",
+        "-DSDL_X11_XDBE=OFF",
+        "-DSDL_X11_XFIXES=OFF",
+        "-DSDL_X11_XSYNC=OFF",
+        "-DSDL_X11_XSCRNSAVER=OFF",
+        "-DSDL_X11_XTEST=OFF",
         "-DSDL_AUDIO=OFF",
         "-DSDL_HAPTIC=OFF",
         "-DSDL_CAMERA=OFF",
@@ -41,6 +61,7 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build
         "-DSDL_POWER=OFF",
         "-DSDL_HIDAPI=OFF",
         "-DSDL_TRAY=OFF",
+        "-DSDL_TESTS=OFF",
         b.fmt("-DCMAKE_BUILD_TYPE={s}", .{CMAKE_BUILD_TYPE}),
         b.fmt("-DCMAKE_INTERPROCEDURAL_OPTIMIZATION={s}", .{CMAKE_LTO}),
         b.fmt("-DCMAKE_C_FLAGS={s}", .{C_FLAGS_STR}),
@@ -78,7 +99,7 @@ fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *s
     }
 
     // TODO: add rustflags for compiling this faster or optimizing
-    if (optimize == .Debug) {
+    if (optimize == .debug) {
         wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "+nightly", "build", "--manifest-path", wgpu_native_cargo_toml, "--no-default-features", "--features=wgsl,vulkan", "-Zbuild-std=std,core,panic_abort", "-Zbuild-std-features=", "--target", "x86_64-unknown-linux-gnu" });
         wgpu_native_make_cmd.setEnvironmentVariable("RUSTFLAGS", rustflags);
         wgpu_native_make_cmd.setEnvironmentVariable("CARGO_PROFILE_DEBUG_PANIC", "abort");
@@ -186,7 +207,7 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Buil
 
     exe.root_module.addObjectFile(path_join(b, dawn_build_dir, "/src/dawn/native/libwebgpu_dawn.a"));
 
-    // TODO: see why we need to manually link against libc++ again
+    // TODO: this happens because zig bundles it's own libc++ which can differ from the system one. Try to use system libc++ everywhere: https://ziggit.dev/t/how-to-link-native-libc-when-using-system-integration-feature/10290/2
     exe.root_module.addObjectFile(.{ .cwd_relative = "/usr/lib/libc++.a" });
 
     return &dawn_make_cmd.step;
@@ -205,7 +226,7 @@ fn make_imgui(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Bui
     // TODO: check if this is the right file
     exe.root_module.addCMacro("IMGUI_USER_CONFIG", "\"imgui_config.h\"");
 
-    if (optimize != .Debug) {
+    if (optimize != .debug) {
         exe.root_module.addCMacro("IMGUI_DISABLE_DEBUG_TOOLS", "");
     }
 
@@ -385,7 +406,7 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     var c_flags: [:0]const u8 = undefined;
-    if (optimize == .Debug) {
+    if (optimize == .debug) {
         c_flags = C_DEBUG_FLAGS;
         CMAKE_BUILD_TYPE = "Debug";
         CMAKE_LTO = "FALSE";
@@ -418,7 +439,7 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
-        .strip = optimize != .Debug,
+        .strip = optimize != .debug,
         // .unwind_tables = .none,
         .link_libc = true,
         .link_libcpp = true,
@@ -429,7 +450,7 @@ pub fn build(b: *std.Build) !void {
         .root_module = exe_mod,
     });
 
-    exe.lto = if (optimize != .Debug) .full else .none;
+    exe.lto = if (optimize != .debug) .full else .none;
 
     make_deps(b, exe, translate_c, optimize);
     exe.root_module.addImport("c", translate_c.createModule());
@@ -452,9 +473,7 @@ pub fn build(b: *std.Build) !void {
 
     // This allows the user to pass arguments to the application in the build
     // command itself, like this: `zig build run -- arg1 arg2 etc`
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    run_cmd.addPassthruArgs();
 
     // This creates a build step. It will be visible in the `zig build --help` menu,
     // and can be selected like this: `zig build run`

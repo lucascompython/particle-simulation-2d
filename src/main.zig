@@ -478,7 +478,7 @@ pub fn main() !void {
         // --- End ImGui UI ---
 
         // Update mouse state from ImGui
-        sim_params.is_mouse_dragging = if (imgui_io.*.MouseDown[0][0] and !imgui_io.*.WantCaptureMouse) 1 else 0;
+        sim_params.is_mouse_dragging = if (imgui_io.*.MouseDown[0] and !imgui_io.*.WantCaptureMouse) 1 else 0;
         if (sim_params.is_mouse_dragging == 1) {
             sim_params.mouse_pos_sim[0] = imgui_io.*.MousePos.x;
             sim_params.mouse_pos_sim[1] = imgui_io.*.MousePos.y;
