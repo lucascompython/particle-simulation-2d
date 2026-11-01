@@ -145,7 +145,7 @@ fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *s
 
 fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build.Step.TranslateC, cpu_count: []const u8) *std.Build.Step {
     const dawn_src_dir = "external/dawn";
-    const dawn_build_dir = join(b, dawn_src_dir ++ "/out", CMAKE_BUILD_TYPE);
+    const dawn_build_dir = join(b, dawn_src_dir ++ "/build", CMAKE_BUILD_TYPE);
 
     const fetch_dawn_deps_cmd = b.addSystemCommand(&.{
         "python3",
