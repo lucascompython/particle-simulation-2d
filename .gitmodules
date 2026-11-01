@@ -13,7 +13,7 @@
 [submodule "external/imgui"]
 	path = external/imgui
 	branch = master
-	url = https://github.com/ocornut/imgui
+	url = https://github.com/ocornut/imgui.git
 [submodule "external/dawn"]
 	path = external/dawn
 	url = https://dawn.googlesource.com/dawn
