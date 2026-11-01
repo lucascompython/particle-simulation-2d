@@ -100,16 +100,15 @@ fn make_wgpu_native(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *s
         rustflags = b.fmt("{s} -Ctarget-cpu=native", .{rustflags});
     }
 
-    // TODO: add rustflags for compiling this faster or optimizing
+    // TODO: add rustflags for compiling this faster or optimizing and support other OS
     if (optimize == .debug) {
         wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "+nightly", "build", "--manifest-path", wgpu_native_cargo_toml, "--no-default-features", "--features=wgsl,vulkan", "-Zbuild-std=std,core,panic_abort", "-Zbuild-std-features=", "--target", "x86_64-unknown-linux-gnu" });
         wgpu_native_make_cmd.setEnvironmentVariable("RUSTFLAGS", rustflags);
-        wgpu_native_make_cmd.setEnvironmentVariable("CARGO_PROFILE_DEBUG_PANIC", "abort");
         exe.root_module.addObjectFile(b.path(wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/debug/libwgpu_native.a"));
     } else {
         rustflags = b.fmt("{s} -Zlocation-detail=none -Zfmt-debug=none", .{rustflags});
 
-        wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "+nightly", "build", "--release", "--manifest-path", wgpu_native_cargo_toml, "--no-default-features", "--features=wgsl,vulkan" });
+        wgpu_native_make_cmd = b.addSystemCommand(&.{ "cargo", "+nightly", "build", "--release", "--manifest-path", wgpu_native_cargo_toml, "--no-default-features", "--features=wgsl,vulkan", "-Zbuild-std=std,core,panic_abort", "-Zbuild-std-features=", "--target", "x86_64-unknown-linux-gnu" });
 
         wgpu_native_make_cmd.setEnvironmentVariable("RUSTFLAGS", rustflags);
         exe.root_module.addObjectFile(b.path(wgpu_native_dir ++ "/target/x86_64-unknown-linux-gnu/release/libwgpu_native.a"));
