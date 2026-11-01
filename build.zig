@@ -5,6 +5,8 @@ const std = @import("std");
 // Flags used for defining C_FLAGS_STR and C_FLAGS_ARR
 const C_RELEASE_FLAGS = "-O3 -ffast-math -flto";
 const C_DEBUG_FLAGS = "-O0 -g";
+const C_COMPILER = "/usr/lib/llvm22/bin/clang"; // have to do this since zig is on llvm v22 for now and at least on arch we already have v23
+const CXX_COMPILER = "/usr/lib/llvm22/bin/clang++";
 var CMAKE_BUILD_TYPE: []const u8 = undefined;
 var CMAKE_LTO: []const u8 = undefined;
 const C_MARCH_NATIVE = "-march=native";
@@ -30,8 +32,8 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build
 
     const sdl_cmake_cmd = b.addSystemCommand(&.{
         "cmake",
-        "-DCMAKE_C_COMPILER=clang",
-        "-DCMAKE_CXX_COMPILER=clang++",
+        b.fmt("-DCMAKE_C_COMPILER={s}", .{C_COMPILER}),
+        b.fmt("-DCMAKE_CXX_COMPILER={s}", .{CXX_COMPILER}),
 
         "-DSDL_NOTIFICATION=OFF",
         "-DSDL_DBUS=OFF",
@@ -68,7 +70,6 @@ fn make_sdl(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Build
         b.fmt("-DCMAKE_C_FLAGS={s}", .{C_FLAGS_STR}),
         "-DSDL_SHARED=OFF",
         "-DSDL_STATIC=ON",
-        "-DCMAKE_C_COMPILER=clang", // Has to be clang for lto to work between compilers since zig uses llvm, not sure how this works on windows
         "-DCMAKE_LINKER_TYPE=LLD",
         b.fmt("-B{s}", .{sdl_build_dir}),
         sdl_src_dir,
@@ -161,8 +162,8 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Buil
         "-B",
         dawn_build_dir,
         b.fmt("-DCMAKE_BUILD_TYPE={s}", .{CMAKE_BUILD_TYPE}),
-        "-DCMAKE_C_COMPILER=clang",
-        "-DCMAKE_CXX_COMPILER=clang++",
+        b.fmt("-DCMAKE_C_COMPILER={s}", .{C_COMPILER}),
+        b.fmt("-DCMAKE_CXX_COMPILER={s}", .{CXX_COMPILER}),
         "-DCMAKE_LINKER_TYPE=LLD",
         b.fmt("-DCMAKE_C_FLAGS={s}", .{C_FLAGS_STR}),
         b.fmt("-DCMAKE_CXX_FLAGS={s} -stdlib=libc++", .{C_FLAGS_STR}), // apparently needs to explicitly link against clang's libc++ for some reason
