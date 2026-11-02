@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const c = @import("c.zig").c;
+const c = @import("c");
 const particle_defs = @import("particle_defs.zig");
 const renderer_2d = @import("renderer_2d.zig");
 const simulation_cpu = @import("simulation_cpu.zig");
@@ -11,8 +11,8 @@ pub const std_options: std.Options = .{ .log_level = switch (@import("builtin").
     else => .info,
 } };
 
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-const allocator = gpa.allocator();
+const allocator = std.heap.smp_allocator;
+// const allocator = gpa.allocator();
 
 const initial_width: c_int = 1360;
 const initial_height: c_int = 768;
@@ -137,7 +137,7 @@ var sim_params: particle_defs.SimParams = .{
 var ui_particle_count: u32 = 100_000;
 var paused: bool = false;
 
-fn request_adapter_callback(status: c.WGPURequestAdapterStatus, adapter: c.WGPUAdapter, message_view: c.WGPUStringView, userdata1: ?*anyopaque, userdata2: ?*anyopaque) callconv(.C) void {
+fn request_adapter_callback(status: c.WGPURequestAdapterStatus, adapter: c.WGPUAdapter, message_view: c.WGPUStringView, userdata1: ?*anyopaque, userdata2: ?*anyopaque) callconv(.c) void {
     _ = userdata1;
     _ = userdata2;
     const message_slice = if (message_view.data) |ptr| std.mem.span(ptr)[0..message_view.length] else null;
@@ -151,7 +151,7 @@ fn request_adapter_callback(status: c.WGPURequestAdapterStatus, adapter: c.WGPUA
     }
 }
 
-fn request_device_callback(status: c.WGPURequestDeviceStatus, device: c.WGPUDevice, message_view: c.WGPUStringView, userdata1: ?*anyopaque, userdata2: ?*anyopaque) callconv(.C) void {
+fn request_device_callback(status: c.WGPURequestDeviceStatus, device: c.WGPUDevice, message_view: c.WGPUStringView, userdata1: ?*anyopaque, userdata2: ?*anyopaque) callconv(.c) void {
     _ = userdata1;
     _ = userdata2;
     const message_slice = if (message_view.data) |ptr| std.mem.span(ptr)[0..message_view.length] else null;
@@ -166,12 +166,15 @@ fn request_device_callback(status: c.WGPURequestDeviceStatus, device: c.WGPUDevi
     }
 }
 
-fn uncaptured_error_callback(@"type": c.WGPUErrorType, message: [*:0]const u8, userdata: ?*anyopaque) callconv(.C) void {
-    _ = userdata;
-    std.log.err("WGPU Uncaptured Error ({any}): {s}", .{ @"type", message });
+fn uncaptured_error_callback(device: [*c]const c.WGPUDevice, @"type": c.WGPUErrorType, message_view: c.WGPUStringView, userdata1: ?*anyopaque, userdata2: ?*anyopaque) callconv(.c) void {
+    _ = device;
+    _ = userdata1;
+    _ = userdata2;
+    const message_slice = if (message_view.data) |ptr| std.mem.span(ptr)[0..message_view.length] else "Unknown error";
+    std.log.err("WGPU Uncaptured Error ({any}): {s}", .{ @"type", message_slice });
 }
 
-fn setup_wgpu(window: *c.SDL_Window) !void {
+fn setup_wgpu(window: *c.SDL_Window, io: std.Io) !void {
     wgpu_instance = c.wgpuCreateInstance(null);
     if (wgpu_instance == null) @panic("Failed to create WGPU instance");
 
@@ -196,7 +199,9 @@ fn setup_wgpu(window: *c.SDL_Window) !void {
 
     if (wgpu_adapter == null) { // Poll until adapter is set (simplified)
         // If using ProcessEvents mode, you would call wgpuInstanceProcessEvents here in a loop.
-        std.time.sleep(100 * std.time.ns_per_ms); // give some time for callback
+        // std.time.sleep(100 * std.time.ns_per_ms); // give some time for callback
+        const duration = std.Io.Duration{ .nanoseconds = 100 * std.time.ns_per_ms };
+        try io.sleep(duration, .real);
         if (wgpu_adapter == null) @panic("Adapter not set after callback (increase delay or implement proper async handling)");
     }
 
@@ -209,6 +214,11 @@ fn setup_wgpu(window: *c.SDL_Window) !void {
         // .requiredFeaturesCount is no longer a field in this webgpu.h version
         .requiredFeatures = null, // Assuming null means no *additional* features beyond defaults
         .defaultQueue = .{ .label = .{ .data = queue_label_str.ptr, .length = queue_label_str.len } },
+        .uncapturedErrorCallbackInfo = .{
+            .callback = uncaptured_error_callback,
+            .userdata1 = null,
+            .userdata2 = null,
+        },
     };
     const device_callback_info = c.WGPURequestDeviceCallbackInfo{
         .mode = c.WGPUCallbackMode_AllowSpontaneous, // Or .ProcessEvents
@@ -221,11 +231,10 @@ fn setup_wgpu(window: *c.SDL_Window) !void {
 
     if (wgpu_device == null) { // Poll until device is set
         // If using ProcessEvents mode, you would call wgpuInstanceProcessEvents here in a loop.
-        std.time.sleep(100 * std.time.ns_per_ms);
+
+        try io.sleep(std.Io.Duration{ .nanoseconds = 100 * std.time.ns_per_ms }, .real);
         if (wgpu_device == null) @panic("Device not set after callback");
     }
-
-    // _ = c.wgpuDeviceSetUncapturedErrorCallback(wgpu_device.?, uncaptured_error_callback, null); // Already removed
 
     var capabilities: c.WGPUSurfaceCapabilities = undefined;
     _ = c.wgpuSurfaceGetCapabilities(wgpu_surface.?, wgpu_adapter.?, &capabilities);
@@ -341,6 +350,8 @@ fn resize_simulation_buffers() !void {
 }
 
 pub fn main() !void {
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    const io = threaded.io();
     if (!c.SDL_Init(c.SDL_INIT_VIDEO)) {
         std.log.err("SDL initialization failed: {s}", .{c.SDL_GetError()});
         std.process.exit(1);
@@ -359,7 +370,7 @@ pub fn main() !void {
     }
     defer c.SDL_DestroyWindow(window);
 
-    try setup_wgpu(window.?);
+    try setup_wgpu(window.?, io);
     defer { // Release with .? as these are optional pointers
         if (wgpu_surface) |s| c.wgpuSurfaceRelease(s);
         if (wgpu_device) |d| c.wgpuDeviceRelease(d);
@@ -370,7 +381,7 @@ pub fn main() !void {
     // Setup ImGui
     _ = c.ImGui_CreateContext(null);
     defer c.ImGui_DestroyContext(null);
-    const io = c.ImGui_GetIO().?;
+    const imgui_io = c.ImGui_GetIO().?;
     // io.*.ConfigFlags |= c.ImGuiConfigFlags_NavEnableKeyboard;
     // io.*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable; // Optional: if you want docking
 
@@ -413,10 +424,10 @@ pub fn main() !void {
 
     var event: c.SDL_Event = undefined;
     var running = true;
-    var last_frame_time = std.time.nanoTimestamp();
+    var last_frame_time = std.Io.Timestamp.now(io, .real).toNanoseconds();
 
     while (running) {
-        const current_frame_time = std.time.nanoTimestamp();
+        const current_frame_time = std.Io.Timestamp.now(io, .real).toNanoseconds();
         const delta: f32 = @as(f32, @floatFromInt(current_frame_time - last_frame_time)) / 1.0e9;
         sim_params.delta_time = delta;
         last_frame_time = current_frame_time;
@@ -467,10 +478,10 @@ pub fn main() !void {
         // --- End ImGui UI ---
 
         // Update mouse state from ImGui
-        sim_params.is_mouse_dragging = if (io.*.MouseDown[0] and !io.*.WantCaptureMouse) 1 else 0;
+        sim_params.is_mouse_dragging = if (imgui_io.*.MouseDown[0] and !imgui_io.*.WantCaptureMouse) 1 else 0;
         if (sim_params.is_mouse_dragging == 1) {
-            sim_params.mouse_pos_sim[0] = io.*.MousePos.x;
-            sim_params.mouse_pos_sim[1] = io.*.MousePos.y;
+            sim_params.mouse_pos_sim[0] = imgui_io.*.MousePos.x;
+            sim_params.mouse_pos_sim[1] = imgui_io.*.MousePos.y;
         }
 
         // Update simulation
@@ -540,6 +551,7 @@ pub fn main() !void {
             .loadOp = c.WGPULoadOp_Load, // Load previous contents (particles)
             .storeOp = c.WGPUStoreOp_Store,
             .clearValue = c.WGPUColor{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 1.0 }, // Clear color not strictly needed due to LoadOp
+            .depthSlice = c.WGPU_DEPTH_SLICE_UNDEFINED,
         };
         const imgui_render_pass_label_str = "ImGui Render Pass";
         const imgui_render_pass_desc = c.WGPURenderPassDescriptor{
@@ -570,9 +582,9 @@ pub fn main() !void {
     if (cpu_sim) |*sim| sim.deinit();
     if (gpu_sim) |*sim| sim.deinit();
 
-    const deinit_check = gpa.deinit();
-    if (deinit_check == .leak) {
-        std.log.warn("Memory leak detected by GeneralPurposeAllocator!", .{});
-        // Optionally, consider std.process.exit(1) if leaks are critical.
-    }
+    // const deinit_check = gpa.deinit();
+    // if (deinit_check == .leak) {
+    //     std.log.warn("Memory leak detected by GeneralPurposeAllocator!", .{});
+    //     // Optionally, consider std.process.exit(1) if leaks are critical.
+    // }
 }

@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig").c;
+const c = @import("c");
 
 pub fn create_shader_module(device: *c.WGPUDeviceImpl, comptime label_comptime: ?[*:0]const u8, code_slice: [:0]const u8) c.WGPUShaderModule { // Return the optional pointer type
     const code_string_view = c.WGPUStringView{

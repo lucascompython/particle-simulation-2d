@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig").c;
+const c = @import("c");
 const particle_defs = @import("particle_defs.zig");
 
 pub const CpuSimulation = struct {
@@ -115,7 +115,7 @@ pub const CpuSimulation = struct {
             const speed = @sqrt(speed_sq);
             // Normalize speed - adjust divisor (5.0) as needed, matching the 3D example
             const normalized_speed = std.math.clamp(speed / 5.0, 0.0, 1.0);
-            
+
             p.color[0] = normalized_speed; // R
             p.color[1] = 0.5 - normalized_speed * 0.5; // G
             p.color[2] = 1.0 - normalized_speed; // B

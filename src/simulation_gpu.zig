@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig").c;
+const c = @import("c");
 const particle_defs = @import("particle_defs.zig");
 const utils = @import("utils.zig");
 
