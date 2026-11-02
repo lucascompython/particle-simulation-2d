@@ -168,6 +168,7 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Buil
         b.fmt("-DCMAKE_CXX_FLAGS={s} -stdlib=libc++", .{C_FLAGS_STR}), // apparently needs to explicitly link against clang's libc++ for some reason
         b.fmt("-DCMAKE_INTERPROCEDURAL_OPTIMIZATION={s}", .{CMAKE_LTO}),
 
+        "-DDAWN_ENABLE_PIC=OFF",
         "-DDAWN_ENABLE_ERROR_INJECTION=OFF",
         "-DDAWN_BUILD_SAMPLES=OFF",
         "-DDAWN_BUILD_TESTS=OFF",
@@ -179,6 +180,8 @@ fn make_dawn(b: *std.Build, exe: *std.Build.Step.Compile, translate_c: *std.Buil
         "-DDAWN_ENABLE_SPIRV_VALIDATION=OFF",
         "-DDAWN_DXC_ENABLE_ASSERTS_IN_NDEBUG=OFF",
 
+        "-DTINT_ENABLE_IR_DUMPING=OFF",
+        "-DTINT_ENABLE_IR_VALIDATION_ASSERTS=OFF",
         "-DTINT_BUILD_SPV_READER=OFF",
         "-DTINT_BUILD_GLSL_WRITER=OFF",
         "-DTINT_BUILD_GLSL_VALIDATOR=OFF",
